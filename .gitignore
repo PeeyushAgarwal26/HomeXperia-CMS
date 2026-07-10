@@ -1,0 +1,44 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# Type/lint caches
+.mypy_cache/
+.ruff_cache/
+
+# Logs
+*.log
+logs/
+
+# setup.sh runtime state
+*.pid
+
+# Uploads (local dev storage)
+uploads/
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
