@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     # a list-typed env var, and a bare "*" isn't valid JSON.
     cors_origins_raw: str = "http://localhost:5173"
 
+    # Base URL of the React admin app — used to build the password-reset email link.
+    frontend_url: str = "http://localhost:5173"
+
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""

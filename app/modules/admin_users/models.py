@@ -3,10 +3,11 @@ from datetime import date, datetime
 
 from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, String
 from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.db.base import Base, BaseModel, SoftDeleteMixin
+from app.modules.geo.models import State
 
 
 class AdminUser(BaseModel, SoftDeleteMixin):
@@ -36,6 +37,7 @@ class AdminUser(BaseModel, SoftDeleteMixin):
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pin_code: Mapped[str] = mapped_column(String(10), nullable=False)
     state_code: Mapped[str] = mapped_column(String(10), ForeignKey("states.code"), nullable=False)
+    state: Mapped[State] = relationship(State, lazy="joined")
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     username: Mapped[str] = mapped_column(String(100), nullable=False)

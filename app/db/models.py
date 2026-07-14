@@ -5,3 +5,7 @@ import app.modules.module_catalog.models  # noqa: F401
 import app.modules.admin_users.models  # noqa: F401
 import app.modules.auth.models  # noqa: F401
 import app.modules.activity_logs.models  # noqa: F401
+import app.modules.categories.models  # noqa: F401
+import app.modules.suppliers.models  # noqa: F401
+import app.modules.customers.models  # noqa: F401
+import app.modules.logs.models  # noqa: F401
