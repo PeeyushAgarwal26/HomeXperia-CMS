@@ -28,7 +28,7 @@ class SupplierService:
     ) -> tuple[list[Supplier], int]:
         return await self.repository.get_all(
             search=search,
-            search_fields=["name", "email", "gst_number", "phone_number"],
+            search_fields=["name", "email", "city", "phone_number"],
             sort_by=sort.sort_by,
             sort_order=sort.sort_order,
             offset=pagination.offset,

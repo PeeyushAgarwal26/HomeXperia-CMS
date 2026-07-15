@@ -26,7 +26,7 @@ class CustomerService:
             return await self._list_for_supplier(pagination, sort, search, supplier_id)
         return await self.repository.get_all(
             search=search,
-            search_fields=["name", "customer_code", "phone_number", "email"],
+            search_fields=["name", "email", "city", "phone_number"],
             sort_by=sort.sort_by,
             sort_order=sort.sort_order,
             offset=pagination.offset,
@@ -42,7 +42,7 @@ class CustomerService:
         return await self.repository.get_all(
             filters={"id": customer_ids},
             search=search,
-            search_fields=["name", "customer_code", "phone_number", "email"],
+            search_fields=["name", "email", "city", "phone_number"],
             sort_by=sort.sort_by,
             sort_order=sort.sort_order,
             offset=pagination.offset,
@@ -58,7 +58,7 @@ class CustomerService:
                 await self.repository.get_all(
                     filters={"id": customer_ids},
                     search=search,
-                    search_fields=["name", "customer_code", "phone_number", "email"],
+                    search_fields=["name", "email", "city", "phone_number"],
                     limit=None,
                 )
             )[0]

@@ -72,6 +72,7 @@ async def list_customers(
             email=item.email,
             phone_number=item.phone_number,
             gst_number=item.gst_number,
+            city=item.city,
             device_limit=item.device_limit,
             active_device_count=item.active_device_count,
             last_login_at=item.last_login_at,

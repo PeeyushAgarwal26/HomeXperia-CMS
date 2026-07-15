@@ -32,7 +32,7 @@ class AdminUserService:
         return await self.repository.get_all(
             filters={"is_super_admin": False},
             search=search,
-            search_fields=["name", "email", "phone_number"],
+            search_fields=["name", "email", "city", "phone_number"],
             sort_by=sort.sort_by,
             sort_order=sort.sort_order,
             offset=pagination.offset,

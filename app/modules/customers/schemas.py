@@ -13,6 +13,7 @@ class CustomerListItem(BaseModel):
     email: str | None
     phone_number: str
     gst_number: str | None
+    city: str | None
     device_limit: int
     active_device_count: int
     last_login_at: datetime | None
@@ -45,8 +46,8 @@ class CustomerCreateRequest(BaseModel):
     gst_number: str | None = None
     address: str | None = None
     pin_code: str | None = None
-    state_code: str | None = None
-    city: str | None = None
+    state_code: str = Field(min_length=1, max_length=10)
+    city: str = Field(min_length=1, max_length=100)
     profile_image_url: str | None = None
     device_limit: int = Field(ge=1, le=100)
     customer_code: str = Field(min_length=1, max_length=100)
@@ -68,8 +69,8 @@ class CustomerUpdateRequest(BaseModel):
     gst_number: str | None = None
     address: str | None = None
     pin_code: str | None = None
-    state_code: str | None = None
-    city: str | None = None
+    state_code: str = Field(min_length=1, max_length=10)
+    city: str = Field(min_length=1, max_length=100)
     profile_image_url: str | None = None
     device_limit: int = Field(ge=1, le=100)
     customer_code: str = Field(min_length=1, max_length=100)
