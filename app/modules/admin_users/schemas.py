@@ -32,7 +32,7 @@ class SubAdminDetail(BaseModel):
 
 
 class SubAdminCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=150)
+    name: str = Field(min_length=1, max_length=250)
     date_of_birth: date | None = None
     email: EmailStr
     address: str | None = None
@@ -53,7 +53,7 @@ class SubAdminCreateRequest(BaseModel):
 
 
 class SubAdminUpdateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=150)
+    name: str = Field(min_length=1, max_length=250)
     date_of_birth: date | None = None
     email: EmailStr
     address: str | None = None

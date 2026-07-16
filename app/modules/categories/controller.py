@@ -196,3 +196,13 @@ async def set_child_category_status(
 ) -> APIResponse:
     child = await ChildCategoryService(session).set_status(child_id, body.is_active)
     return controller.success(data={"id": child.id, "is_active": child.is_active})
+
+
+@router.delete("/children/{child_id}", response_model=APIResponse[None])
+async def delete_child_category(
+    child_id: uuid.UUID,
+    _: AdminUser = Depends(_require_child_category_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    await ChildCategoryService(session).delete(child_id)
+    return controller.success(message="Category deleted.")

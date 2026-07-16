@@ -18,13 +18,13 @@ class ParentCategory(BaseModel, SoftDeleteMixin):
         Index("ix_parent_categories_name", "name", unique=True, postgresql_where="deleted_at IS NULL"),
     )
 
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(250), nullable=False)
     icon_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 
-class ChildCategory(BaseModel):
+class ChildCategory(BaseModel, SoftDeleteMixin):
     __tablename__ = "child_categories"
     __table_args__ = (Index("ix_child_categories_parent_category_id", "parent_category_id"),)
 
@@ -32,7 +32,7 @@ class ChildCategory(BaseModel):
         UUID(as_uuid=True), ForeignKey("parent_categories.id"), nullable=False
     )
     parent_category: Mapped[ParentCategory] = relationship(ParentCategory, lazy="joined")
-    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    name: Mapped[str] = mapped_column(String(250), nullable=False)
     icon_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

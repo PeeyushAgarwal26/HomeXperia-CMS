@@ -14,6 +14,8 @@ from app.modules.categories.schemas import (
     ParentCategoryNode,
     ParentCategoryUpdateRequest,
 )
+from app.modules.filters.repository import FilterValueRepository
+from app.modules.products.repository import ProductRepository
 
 
 class CategoryService:
@@ -82,13 +84,15 @@ class ParentCategoryService:
         return await self.get_parent(parent_id)
 
     async def delete(self, parent_id: uuid.UUID) -> None:
-        await self.get_parent(parent_id)
+        parent = await self.get_parent(parent_id)
         _, child_count = await self.child_repository.get_all(
             filters={"parent_category_id": parent_id}, limit=1
         )
         if child_count > 0:
+            noun = "child category" if child_count == 1 else "child categories"
             raise ConflictException(
-                "This category still has child categories — remove or reassign them first."
+                f'"{parent.name}" has {child_count} {noun} assigned to it. Delete those child '
+                "categories or reassign them to a different parent category before removing this one."
             )
         await self.repository.soft_delete(parent_id)
 
@@ -99,6 +103,8 @@ class ChildCategoryService:
     def __init__(self, session: AsyncSession) -> None:
         self.repository = ChildCategoryRepository(session)
         self.parent_repository = ParentCategoryRepository(session)
+        self.product_repository = ProductRepository(session)
+        self.filter_value_repository = FilterValueRepository(session)
 
     async def list_children(
         self,
@@ -144,3 +150,25 @@ class ChildCategoryService:
         await self.get_child(child_id)
         await self.repository.update(child_id, {"is_active": is_active})
         return await self.get_child(child_id)
+
+    async def delete(self, child_id: uuid.UUID) -> None:
+        child = await self.get_child(child_id)
+        _, product_count = await self.product_repository.get_all(
+            filters={"child_category_id": child_id}, limit=1
+        )
+        if product_count > 0:
+            noun = "product" if product_count == 1 else "products"
+            raise ConflictException(
+                f'"{child.name}" has {product_count} {noun} assigned to it. Move or delete those '
+                "products before removing this child category."
+            )
+        _, filter_value_count = await self.filter_value_repository.get_all(
+            filters={"child_category_id": child_id}, limit=1
+        )
+        if filter_value_count > 0:
+            noun = "filter value" if filter_value_count == 1 else "filter values"
+            raise ConflictException(
+                f'"{child.name}" has {filter_value_count} {noun} assigned to it. Remove or reassign '
+                "those filter values before removing this child category."
+            )
+        await self.repository.soft_delete(child_id)

@@ -6,7 +6,10 @@ from app.common.pagination import PaginationParams, SortParams
 from app.core.security import hash_password
 from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
 from app.modules.categories.repository import CategoryRepository
+from app.modules.customers.suppliers_repository import CustomerSupplierRepository
+from app.modules.filters.repository import FilterValueRepository
 from app.modules.module_catalog.repository import ModuleRepository
+from app.modules.products.repository import ProductRepository
 from app.modules.suppliers.categories_repository import SupplierCategoryRepository
 from app.modules.suppliers.models import Supplier
 from app.modules.suppliers.permissions_repository import SupplierPermissionRepository
@@ -22,6 +25,9 @@ class SupplierService:
         self.category_repository = CategoryRepository(session)
         self.permission_repository = SupplierPermissionRepository(session)
         self.module_repository = ModuleRepository(session)
+        self.product_repository = ProductRepository(session)
+        self.filter_value_repository = FilterValueRepository(session)
+        self.customer_supplier_repository = CustomerSupplierRepository(session)
 
     async def list_suppliers(
         self, pagination: PaginationParams, sort: SortParams, search: str | None
@@ -81,7 +87,32 @@ class SupplierService:
         return await self.get_supplier(supplier_id)
 
     async def delete(self, supplier_id: uuid.UUID) -> None:
-        await self.get_supplier(supplier_id)
+        supplier = await self.get_supplier(supplier_id)
+        _, product_count = await self.product_repository.get_all(
+            filters={"supplier_id": supplier_id}, limit=1
+        )
+        if product_count > 0:
+            noun = "product" if product_count == 1 else "products"
+            raise ConflictException(
+                f'"{supplier.name}" has {product_count} {noun} in its catalog. Move or delete those '
+                "products before removing this supplier."
+            )
+        _, filter_value_count = await self.filter_value_repository.get_all(
+            filters={"supplier_id": supplier_id}, limit=1
+        )
+        if filter_value_count > 0:
+            noun = "filter value" if filter_value_count == 1 else "filter values"
+            raise ConflictException(
+                f'"{supplier.name}" has {filter_value_count} {noun} assigned to it. Remove or reassign '
+                "those filter values before removing this supplier."
+            )
+        customer_count = len(await self.customer_supplier_repository.get_customer_ids(supplier_id))
+        if customer_count > 0:
+            noun = "customer" if customer_count == 1 else "customers"
+            raise ConflictException(
+                f'"{supplier.name}" is mapped to {customer_count} {noun}. Unmap it from those customers '
+                "before removing this supplier."
+            )
         await self.repository.soft_delete(supplier_id)
 
     async def set_status(self, supplier_id: uuid.UUID, is_active: bool) -> Supplier:

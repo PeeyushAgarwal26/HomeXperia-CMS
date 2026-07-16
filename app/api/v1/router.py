@@ -9,6 +9,9 @@ from app.modules.categories.controller import router as categories_router
 from app.modules.customers.controller import router as customers_router
 from app.modules.suppliers.controller import router as suppliers_router
 from app.modules.logs.controller import router as logs_router
+from app.modules.filters.controller import router as filters_router
+from app.modules.products.controller import router as products_router
+from app.modules.room_categories.controller import router as room_categories_router
 
 # Each module's controller.py defines its own `router = APIRouter(prefix=..., tags=[...])`.
 # Register it here as the module is built.
@@ -23,3 +26,6 @@ api_v1_router.include_router(categories_router)
 api_v1_router.include_router(customers_router)
 api_v1_router.include_router(suppliers_router)
 api_v1_router.include_router(logs_router)
+api_v1_router.include_router(filters_router)
+api_v1_router.include_router(products_router)
+api_v1_router.include_router(room_categories_router)

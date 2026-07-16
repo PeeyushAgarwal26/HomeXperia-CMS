@@ -30,12 +30,12 @@ class ParentCategoryDetail(BaseModel):
 
 
 class ParentCategoryCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=250)
     icon_url: str | None = None
 
 
 class ParentCategoryUpdateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=250)
     icon_url: str | None = None
 
 
@@ -59,13 +59,13 @@ class ChildCategoryDetail(BaseModel):
 
 class ChildCategoryCreateRequest(BaseModel):
     parent_category_id: uuid.UUID
-    name: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=250)
     icon_url: str | None = None
 
 
 class ChildCategoryUpdateRequest(BaseModel):
     parent_category_id: uuid.UUID
-    name: str = Field(min_length=1, max_length=100)
+    name: str = Field(min_length=1, max_length=250)
     icon_url: str | None = None
 
 
