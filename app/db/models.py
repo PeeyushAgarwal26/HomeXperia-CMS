@@ -11,4 +11,5 @@ import app.modules.customers.models  # noqa: F401
 import app.modules.logs.models  # noqa: F401
 import app.modules.filters.models  # noqa: F401
 import app.modules.products.models  # noqa: F401
+import app.modules.product_uploads.models  # noqa: F401
 import app.modules.room_categories.models  # noqa: F401

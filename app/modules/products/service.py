@@ -3,7 +3,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginationParams, SortParams
-from app.exceptions.http_exceptions import BadRequestException, NotFoundException
+from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
 from app.modules.categories.repository import ChildCategoryRepository
 from app.modules.filters.repository import FilterValueRepository
 from app.modules.products.models import Product
@@ -90,11 +90,18 @@ class ProductService:
             )
         )[0]
 
-    async def _check_refs(self, data: ProductCreateRequest | ProductUpdateRequest) -> None:
+    async def _check_refs(
+        self, data: ProductCreateRequest | ProductUpdateRequest, exclude_id: uuid.UUID | None = None
+    ) -> None:
         if await self.child_category_repository.get_by_id(data.child_category_id) is None:
             raise NotFoundException("Child category")
         if await self.supplier_repository.get_by_id(data.supplier_id) is None:
             raise NotFoundException("Supplier")
+        existing = await self.repository.get_by_supplier_and_bar_code(data.supplier_id, data.bar_code)
+        if existing is not None and existing.id != exclude_id:
+            raise ConflictException(
+                f'A product with Bar Code "{data.bar_code}" already exists for this supplier.'
+            )
         unique_ids = list(dict.fromkeys(data.filter_value_ids))
         if not unique_ids:
             return
@@ -120,7 +127,7 @@ class ProductService:
 
     async def update(self, product_id: uuid.UUID, data: ProductUpdateRequest) -> Product:
         await self.get_product(product_id)
-        await self._check_refs(data)
+        await self._check_refs(data, exclude_id=product_id)
         payload = data.model_dump(exclude={"filter_value_ids"})
         await self.repository.update(product_id, payload)
         await self.product_filter_value_repository.replace(product_id, data.filter_value_ids)

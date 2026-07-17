@@ -137,12 +137,16 @@ class ChildCategoryService:
 
     async def create(self, data: ChildCategoryCreateRequest) -> ChildCategory:
         await self._check_parent_exists(data.parent_category_id)
+        if await self.repository.name_taken(data.parent_category_id, data.name):
+            raise ConflictException("This category name is already in use under the selected parent category.")
         child = await self.repository.create(data.model_dump())
         return await self.get_child(child.id)
 
     async def update(self, child_id: uuid.UUID, data: ChildCategoryUpdateRequest) -> ChildCategory:
         await self.get_child(child_id)
         await self._check_parent_exists(data.parent_category_id)
+        if await self.repository.name_taken(data.parent_category_id, data.name, exclude_id=child_id):
+            raise ConflictException("This category name is already in use under the selected parent category.")
         await self.repository.update(child_id, data.model_dump())
         return await self.get_child(child_id)
 

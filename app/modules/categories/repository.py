@@ -23,6 +23,17 @@ class ChildCategoryRepository(BaseRepository[ChildCategory]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(ChildCategory, session)
 
+    async def name_taken(
+        self, parent_category_id: uuid.UUID, name: str, exclude_id: uuid.UUID | None = None
+    ) -> bool:
+        stmt = self._base_select().where(
+            ChildCategory.parent_category_id == parent_category_id, ChildCategory.name == name
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(ChildCategory.id != exclude_id)
+        result = await self.session.execute(stmt.limit(1))
+        return result.first() is not None
+
 
 class CategoryRepository:
     def __init__(self, session: AsyncSession) -> None:

@@ -34,10 +34,12 @@
 -- ============================================================
 
 --
+
+--
 -- PostgreSQL database dump
 --
 
-\restrict uXVVrJLgy4AknaKdzt9q9TCxSP2FaoHE2WIMH7vI6vr85sVM4PEKQpx1iNlx9W2
+\restrict dSrkpAcIuhsvjlzNBckJS55Y8qFrIqlzXHW7cwk2uoqxfwmXBHqGP5w13Mrq2ki
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -271,6 +273,39 @@ CREATE TABLE public.password_reset_tokens (
 CREATE TABLE public.product_filter_values (
     product_id uuid NOT NULL,
     filter_value_id uuid NOT NULL
+);
+
+
+--
+-- Name: product_upload_log_items; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_upload_log_items (
+    id uuid NOT NULL,
+    log_id uuid NOT NULL,
+    row_no integer NOT NULL,
+    catalog_name character varying(250),
+    is_success boolean NOT NULL,
+    message character varying(1000),
+    action character varying(20)
+);
+
+
+--
+-- Name: product_upload_logs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_upload_logs (
+    id uuid NOT NULL,
+    supplier_id uuid NOT NULL,
+    uploaded_by uuid NOT NULL,
+    file_name character varying(255) NOT NULL,
+    total_rows integer NOT NULL,
+    success_count integer NOT NULL,
+    error_count integer NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    status character varying(20) NOT NULL,
+    error_message character varying(1000)
 );
 
 
@@ -514,6 +549,22 @@ ALTER TABLE ONLY public.product_filter_values
 
 
 --
+-- Name: product_upload_log_items product_upload_log_items_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_upload_log_items
+    ADD CONSTRAINT product_upload_log_items_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: product_upload_logs product_upload_logs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_upload_logs
+    ADD CONSTRAINT product_upload_logs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: products products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -730,6 +781,20 @@ CREATE UNIQUE INDEX ix_parent_categories_name ON public.parent_categories USING 
 --
 
 CREATE INDEX ix_password_reset_tokens_admin_user_id ON public.password_reset_tokens USING btree (admin_user_id);
+
+
+--
+-- Name: ix_product_upload_log_items_log_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_product_upload_log_items_log_id ON public.product_upload_log_items USING btree (log_id);
+
+
+--
+-- Name: ix_product_upload_logs_supplier_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_product_upload_logs_supplier_id ON public.product_upload_logs USING btree (supplier_id);
 
 
 --
@@ -956,6 +1021,30 @@ ALTER TABLE ONLY public.product_filter_values
 
 
 --
+-- Name: product_upload_log_items product_upload_log_items_log_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_upload_log_items
+    ADD CONSTRAINT product_upload_log_items_log_id_fkey FOREIGN KEY (log_id) REFERENCES public.product_upload_logs(id) ON DELETE CASCADE;
+
+
+--
+-- Name: product_upload_logs product_upload_logs_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_upload_logs
+    ADD CONSTRAINT product_upload_logs_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
+-- Name: product_upload_logs product_upload_logs_uploaded_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_upload_logs
+    ADD CONSTRAINT product_upload_logs_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES public.admin_users(id);
+
+
+--
 -- Name: products products_child_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1047,13 +1136,13 @@ ALTER TABLE ONLY public.suppliers
 -- PostgreSQL database dump complete
 --
 
-\unrestrict uXVVrJLgy4AknaKdzt9q9TCxSP2FaoHE2WIMH7vI6vr85sVM4PEKQpx1iNlx9W2
+\unrestrict dSrkpAcIuhsvjlzNBckJS55Y8qFrIqlzXHW7cwk2uoqxfwmXBHqGP5w13Mrq2ki
 
 --
 -- PostgreSQL database dump
 --
 
-\restrict Fl1hwGYI2Yq5m1wiWLsbayuXsK26kux2a9aElZtpFtXkBrJvSo03nJ5SPoSqaBr
+\restrict GQvH7gv4A8gFTpJDGMgynZx1F92gHEIra0Pqe0IFIfW1qgHY4zv41hETQh5gho5
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -1079,8 +1168,6 @@ INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_a
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity', 'Activity', NULL, 8, false, true, '2eff812a-4ab3-4d1b-a9e8-b15c25364f43', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity.orders', 'Orders', '2eff812a-4ab3-4d1b-a9e8-b15c25364f43', 9, false, true, '14c83c85-6a05-4d0a-a23e-e3e08f7e3dcd', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product', 'Upload Product', NULL, 10, false, true, 'b8e747d4-d24b-468c-b44c-0c300c7254bc', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.upload_files', 'Upload Files', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 11, false, true, '08387a0e-a14c-4413-9fac-ccd263b0799b', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.log', 'Log', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 12, false, true, '5dea2e66-120b-40ff-bf40-e04859c6b90a', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management', 'User Management', NULL, 13, true, true, '8a6b1865-5d4d-42fd-98f8-d6829e5a918b', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.sub_admin', 'Sub Admin', '8a6b1865-5d4d-42fd-98f8-d6829e5a918b', 15, true, true, '69b691e6-6e54-4eb8-833b-552b09395216', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('logs', 'Logs', NULL, 17, false, true, 'e7d7a486-1a01-4828-be59-6143b58ea3ab', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
@@ -1099,6 +1186,8 @@ INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_a
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.filter', 'Filter', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 4, true, true, '8545d6d7-1e6e-4f72-ab88-9bd143703c35', '2026-07-13 10:47:15.84916+05:30', '2026-07-15 10:57:37.646947+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.filter_value', 'Filter Value', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 5, true, true, '78df237c-e166-47bc-b478-30491344ec7a', '2026-07-13 10:47:15.84916+05:30', '2026-07-15 10:57:37.646947+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.product', 'Product', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 6, true, true, '691e98ab-8e9f-4d0a-9ef7-fbcd398325e9', '2026-07-13 10:47:15.84916+05:30', '2026-07-15 11:13:52.708942+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.upload_files', 'Upload Files', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 11, true, true, '08387a0e-a14c-4413-9fac-ccd263b0799b', '2026-07-13 10:47:15.84916+05:30', '2026-07-17 11:34:20.010188+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.log', 'Log', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 12, true, true, '5dea2e66-120b-40ff-bf40-e04859c6b90a', '2026-07-13 10:47:15.84916+05:30', '2026-07-17 11:34:20.010188+05:30');
 
 
 --
@@ -1147,5 +1236,5 @@ INSERT INTO public.states (code, name, sort_order) VALUES ('PY', 'Puducherry', 3
 -- PostgreSQL database dump complete
 --
 
-\unrestrict Fl1hwGYI2Yq5m1wiWLsbayuXsK26kux2a9aElZtpFtXkBrJvSo03nJ5SPoSqaBr
+\unrestrict GQvH7gv4A8gFTpJDGMgynZx1F92gHEIra0Pqe0IFIfW1qgHY4zv41hETQh5gho5
 
