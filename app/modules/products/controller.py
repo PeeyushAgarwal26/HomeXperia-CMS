@@ -14,6 +14,7 @@ from app.db.session import get_db_session
 from app.modules.admin_users.models import AdminUser
 from app.modules.products.models import Product
 from app.modules.products.schemas import (
+    ApplicableFilterGroup,
     ProductCreateRequest,
     ProductDetail,
     ProductListItem,
@@ -28,7 +29,7 @@ controller = BaseController()
 _require_product_access = require_module_permission("master.product")
 
 
-def _to_detail(item: Product) -> ProductDetail:
+def _to_detail(item: Product, filter_value_ids: list[uuid.UUID]) -> ProductDetail:
     return ProductDetail(
         id=item.id,
         order_no=item.order_no,
@@ -40,11 +41,12 @@ def _to_detail(item: Product) -> ProductDetail:
         image_url=item.image_url,
         available_quantity=item.available_quantity,
         rate=float(item.rate) if item.rate is not None else None,
-        shine_fabric_value_id=item.shine_fabric_value_id,
-        fabric_transparency_value_id=item.fabric_transparency_value_id,
+        shine_fabric=item.shine_fabric,
+        fabric_transparency=item.fabric_transparency,
         length=float(item.length),
         width=float(item.width),
         is_active=item.is_active,
+        filter_value_ids=filter_value_ids,
     )
 
 
@@ -63,10 +65,8 @@ def _to_list_item(item: Product, sno: int) -> ProductListItem:
         image_url=item.image_url,
         available_quantity=item.available_quantity,
         rate=float(item.rate) if item.rate is not None else None,
-        shine_fabric_value_id=item.shine_fabric_value_id,
-        shine_fabric_value=item.shine_fabric_value.value,
-        fabric_transparency_value_id=item.fabric_transparency_value_id,
-        fabric_transparency_value=item.fabric_transparency_value.value,
+        shine_fabric=item.shine_fabric,
+        fabric_transparency=item.fabric_transparency,
         length=float(item.length),
         width=float(item.width),
         is_active=item.is_active,
@@ -98,8 +98,21 @@ async def create_product(
     _: AdminUser = Depends(_require_product_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    item = await ProductService(session).create(body)
-    return controller.success(data=_to_detail(item), message="Product created successfully.")
+    service = ProductService(session)
+    item = await service.create(body)
+    filter_value_ids = await service.get_filter_value_ids(item.id)
+    return controller.success(data=_to_detail(item, filter_value_ids), message="Product created successfully.")
+
+
+@router.get("/applicable-filters", response_model=APIResponse[list[ApplicableFilterGroup]])
+async def get_applicable_filters(
+    child_category_id: Annotated[uuid.UUID, Query()],
+    supplier_id: Annotated[uuid.UUID, Query()],
+    _: AdminUser = Depends(_require_product_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    groups = await ProductService(session).get_applicable_filters(child_category_id, supplier_id)
+    return controller.success(data=groups)
 
 
 @router.get("/export")
@@ -126,8 +139,8 @@ async def export_products(
             item.bar_code,
             item.available_quantity if item.available_quantity is not None else "",
             float(item.rate) if item.rate is not None else "",
-            item.shine_fabric_value.value,
-            item.fabric_transparency_value.value,
+            item.shine_fabric,
+            item.fabric_transparency,
             float(item.length),
             float(item.width),
             "Yes" if item.is_active else "No",
@@ -144,8 +157,10 @@ async def get_product(
     _: AdminUser = Depends(_require_product_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    item = await ProductService(session).get_product(product_id)
-    return controller.success(data=_to_detail(item))
+    service = ProductService(session)
+    item = await service.get_product(product_id)
+    filter_value_ids = await service.get_filter_value_ids(product_id)
+    return controller.success(data=_to_detail(item, filter_value_ids))
 
 
 @router.put("/{product_id}", response_model=APIResponse[ProductDetail])
@@ -155,8 +170,10 @@ async def update_product(
     _: AdminUser = Depends(_require_product_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    item = await ProductService(session).update(product_id, body)
-    return controller.success(data=_to_detail(item), message="Product updated successfully.")
+    service = ProductService(session)
+    item = await service.update(product_id, body)
+    filter_value_ids = await service.get_filter_value_ids(product_id)
+    return controller.success(data=_to_detail(item, filter_value_ids), message="Product updated successfully.")
 
 
 @router.patch("/{product_id}/status", response_model=APIResponse[dict])

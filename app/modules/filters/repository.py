@@ -21,3 +21,21 @@ class FilterRepository(BaseRepository[Filter]):
 class FilterValueRepository(BaseRepository[FilterValue]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(FilterValue, session)
+
+    async def list_applicable(
+        self, child_category_id: uuid.UUID, supplier_id: uuid.UUID
+    ) -> list[FilterValue]:
+        """Every active FilterValue scoped to this exact Child Category + Supplier pair —
+        this is what drives Product's dynamic "Product Filters" section: which Filters
+        even show up, and what options each one offers, depends entirely on this."""
+        stmt = (
+            self._base_select()
+            .where(
+                FilterValue.child_category_id == child_category_id,
+                FilterValue.supplier_id == supplier_id,
+                FilterValue.is_active.is_(True),
+            )
+            .order_by(FilterValue.value)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

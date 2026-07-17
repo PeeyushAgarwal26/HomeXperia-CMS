@@ -13,7 +13,7 @@ from app.modules.filters.schemas import (
     FilterValueCreateRequest,
     FilterValueUpdateRequest,
 )
-from app.modules.products.repository import ProductRepository
+from app.modules.products.repository import ProductFilterValueRepository
 from app.modules.suppliers.repository import SupplierRepository
 
 
@@ -72,7 +72,7 @@ class FilterValueService:
         self.filter_repository = FilterRepository(session)
         self.child_category_repository = ChildCategoryRepository(session)
         self.supplier_repository = SupplierRepository(session)
-        self.product_repository = ProductRepository(session)
+        self.product_filter_value_repository = ProductFilterValueRepository(session)
 
     async def list_values(
         self,
@@ -152,17 +152,11 @@ class FilterValueService:
 
     async def delete(self, value_id: uuid.UUID) -> None:
         value = await self.get_value(value_id)
-        _, shine_count = await self.product_repository.get_all(
-            filters={"shine_fabric_value_id": value_id}, limit=1
-        )
-        _, transparency_count = await self.product_repository.get_all(
-            filters={"fabric_transparency_value_id": value_id}, limit=1
-        )
-        product_count = shine_count + transparency_count
+        product_count = await self.product_filter_value_repository.count_products_using(value_id)
         if product_count > 0:
             noun = "product" if product_count == 1 else "products"
             raise ConflictException(
-                f'"{value.value}" is used as the Shine Fabric or Fabric Transparency value on '
-                f"{product_count} {noun}. Update those products before removing this filter value."
+                f'"{value.value}" is selected on {product_count} {noun}. Update those products before '
+                "removing this filter value."
             )
         await self.repository.soft_delete(value_id)

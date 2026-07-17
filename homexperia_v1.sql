@@ -11,18 +11,19 @@
 --        -h <host> -U <user> -d <db> > /tmp/seed.sql
 --    cat /tmp/schema.sql /tmp/seed.sql > homexperia_v1.sql
 --
---  Contains: full schema for all 19 tables (admin_users, states, modules,
+--  Contains: full schema for all 20 tables (admin_users, states, modules,
 --  admin_user_module_permissions, refresh_tokens, password_reset_tokens,
 --  activity_logs, parent_categories, child_categories, room_categories,
 --  suppliers, supplier_child_categories, supplier_module_permissions,
 --  customers, customer_suppliers, customer_login_events, filters,
---  filter_values, products) plus seed data for states (36) and modules (25)
---  — the read-only reference tables. Deliberately excludes admin_users data:
---  the super admin is created per-environment via `./setup.sh setup` /
---  `python -m scripts.create_superadmin`, never baked into a checked-in
---  file, since there is no create-account page in this admin panel and a
---  shared credential in git would defeat the point. Also excludes every
---  other table's rows (categories, suppliers, customers, filters, products,
+--  filter_values, products, product_filter_values) plus seed data for
+--  states (36) and modules (25) — the read-only reference tables.
+--  Deliberately excludes admin_users data: the super admin is created
+--  per-environment via `./setup.sh setup` / `python -m
+--  scripts.create_superadmin`, never baked into a checked-in file, since
+--  there is no create-account page in this admin panel and a shared
+--  credential in git would defeat the point. Also excludes every other
+--  table's rows (categories, suppliers, customers, filters, products,
 --  room_categories, etc.) — those are real operational data, not
 --  reference/seed data.
 --
@@ -36,7 +37,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict fC7FxoiP44BN5sDvj7KnnFe64kd4Ut3dKJteYRfFSzCXv6JaFrV8XGJHoAgyE05
+\restrict uXVVrJLgy4AknaKdzt9q9TCxSP2FaoHE2WIMH7vI6vr85sVM4PEKQpx1iNlx9W2
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -264,6 +265,16 @@ CREATE TABLE public.password_reset_tokens (
 
 
 --
+-- Name: product_filter_values; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_filter_values (
+    product_id uuid NOT NULL,
+    filter_value_id uuid NOT NULL
+);
+
+
+--
 -- Name: products; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -277,15 +288,15 @@ CREATE TABLE public.products (
     image_url character varying(500),
     available_quantity integer,
     rate numeric(10,2),
-    shine_fabric_value_id uuid NOT NULL,
-    fabric_transparency_value_id uuid NOT NULL,
     length numeric(10,2) NOT NULL,
     width numeric(10,2) NOT NULL,
     is_active boolean NOT NULL,
     id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deleted_at timestamp with time zone
+    deleted_at timestamp with time zone,
+    shine_fabric smallint DEFAULT '0'::smallint NOT NULL,
+    fabric_transparency smallint DEFAULT '0'::smallint NOT NULL
 );
 
 
@@ -492,6 +503,14 @@ ALTER TABLE ONLY public.password_reset_tokens
 
 ALTER TABLE ONLY public.password_reset_tokens
     ADD CONSTRAINT password_reset_tokens_token_hash_key UNIQUE (token_hash);
+
+
+--
+-- Name: product_filter_values product_filter_values_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_filter_values
+    ADD CONSTRAINT product_filter_values_pkey PRIMARY KEY (product_id, filter_value_id);
 
 
 --
@@ -921,27 +940,27 @@ ALTER TABLE ONLY public.password_reset_tokens
 
 
 --
+-- Name: product_filter_values product_filter_values_filter_value_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_filter_values
+    ADD CONSTRAINT product_filter_values_filter_value_id_fkey FOREIGN KEY (filter_value_id) REFERENCES public.filter_values(id) ON DELETE CASCADE;
+
+
+--
+-- Name: product_filter_values product_filter_values_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_filter_values
+    ADD CONSTRAINT product_filter_values_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+
+
+--
 -- Name: products products_child_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.products
     ADD CONSTRAINT products_child_category_id_fkey FOREIGN KEY (child_category_id) REFERENCES public.child_categories(id);
-
-
---
--- Name: products products_fabric_transparency_value_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_fabric_transparency_value_id_fkey FOREIGN KEY (fabric_transparency_value_id) REFERENCES public.filter_values(id);
-
-
---
--- Name: products products_shine_fabric_value_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.products
-    ADD CONSTRAINT products_shine_fabric_value_id_fkey FOREIGN KEY (shine_fabric_value_id) REFERENCES public.filter_values(id);
 
 
 --
@@ -1028,13 +1047,13 @@ ALTER TABLE ONLY public.suppliers
 -- PostgreSQL database dump complete
 --
 
-\unrestrict fC7FxoiP44BN5sDvj7KnnFe64kd4Ut3dKJteYRfFSzCXv6JaFrV8XGJHoAgyE05
+\unrestrict uXVVrJLgy4AknaKdzt9q9TCxSP2FaoHE2WIMH7vI6vr85sVM4PEKQpx1iNlx9W2
 
 --
 -- PostgreSQL database dump
 --
 
-\restrict U5lMfh4NCzjUl8xp96qZYLGltL797ulsTdyMK3pT6hVK203AJaJtG4Nf81a6U4a
+\restrict Fl1hwGYI2Yq5m1wiWLsbayuXsK26kux2a9aElZtpFtXkBrJvSo03nJ5SPoSqaBr
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -1128,5 +1147,5 @@ INSERT INTO public.states (code, name, sort_order) VALUES ('PY', 'Puducherry', 3
 -- PostgreSQL database dump complete
 --
 
-\unrestrict U5lMfh4NCzjUl8xp96qZYLGltL797ulsTdyMK3pT6hVK203AJaJtG4Nf81a6U4a
+\unrestrict Fl1hwGYI2Yq5m1wiWLsbayuXsK26kux2a9aElZtpFtXkBrJvSo03nJ5SPoSqaBr
 

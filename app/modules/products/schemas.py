@@ -17,10 +17,8 @@ class ProductListItem(BaseModel):
     image_url: str | None
     available_quantity: int | None
     rate: float | None
-    shine_fabric_value_id: uuid.UUID
-    shine_fabric_value: str
-    fabric_transparency_value_id: uuid.UUID
-    fabric_transparency_value: str
+    shine_fabric: int
+    fabric_transparency: int
     length: float
     width: float
     is_active: bool
@@ -37,11 +35,12 @@ class ProductDetail(BaseModel):
     image_url: str | None
     available_quantity: int | None
     rate: float | None
-    shine_fabric_value_id: uuid.UUID
-    fabric_transparency_value_id: uuid.UUID
+    shine_fabric: int
+    fabric_transparency: int
     length: float
     width: float
     is_active: bool
+    filter_value_ids: list[uuid.UUID]
 
 
 class ProductCreateRequest(BaseModel):
@@ -54,10 +53,11 @@ class ProductCreateRequest(BaseModel):
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    shine_fabric_value_id: uuid.UUID
-    fabric_transparency_value_id: uuid.UUID
+    shine_fabric: int = Field(ge=0, le=5)
+    fabric_transparency: int = Field(ge=0, le=1)
     length: float
     width: float
+    filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class ProductUpdateRequest(BaseModel):
@@ -70,11 +70,23 @@ class ProductUpdateRequest(BaseModel):
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    shine_fabric_value_id: uuid.UUID
-    fabric_transparency_value_id: uuid.UUID
+    shine_fabric: int = Field(ge=0, le=5)
+    fabric_transparency: int = Field(ge=0, le=1)
     length: float
     width: float
+    filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class StatusUpdateRequest(BaseModel):
     is_active: bool
+
+
+class ProductFilterOption(BaseModel):
+    id: uuid.UUID
+    value: str
+
+
+class ApplicableFilterGroup(BaseModel):
+    filter_id: uuid.UUID
+    filter_name: str
+    options: list[ProductFilterOption]
