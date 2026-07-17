@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_v1_router
 from app.common.logging import configure_logging
@@ -38,10 +39,16 @@ def create_app() -> FastAPI:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        # Cross-origin JS can't read Content-Disposition unless it's explicitly
+        # exposed — needed so the frontend can recover the server-generated
+        # (timestamped) filename for file exports (see app/common/xlsx_export.py).
+        expose_headers=["Content-Disposition"],
     )
 
     register_exception_handlers(app)
     app.include_router(api_v1_router)
+    Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
+    app.mount(f"/{settings.uploads_dir}", StaticFiles(directory=settings.uploads_dir), name="uploads")
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> dict:

@@ -26,7 +26,7 @@ set -euo pipefail
 # Remember whether the caller actually set APP_PORT before we default it below —
 # setup_env needs to know whether to prompt, and by then the default has already applied.
 _APP_PORT_FROM_ENV="${APP_PORT:-}"
-APP_PORT="${APP_PORT:-8000}"
+APP_PORT="${APP_PORT:-8080}"
 APP_HOST="${APP_HOST:-0.0.0.0}"
 APP_ENV_DEFAULT="${APP_ENV:-development}"
 VENV_DIR="${VENV_DIR:-.venv}"
@@ -228,8 +228,8 @@ setup_env() {
     if [ -n "${_APP_PORT_FROM_ENV:-}" ]; then
         info "App port    → ${APP_PORT}  (from \$APP_PORT)"
     else
-        read -rp "  App port    [8000]: " input_port
-        APP_PORT="${input_port:-8000}"
+        read -rp "  App port    [8080]: " input_port
+        APP_PORT="${input_port:-8080}"
     fi
 
     if [ -n "${APP_ENV:-}" ]; then
@@ -259,6 +259,7 @@ REFRESH_TOKEN_EXPIRE_DAYS=7
 PASSWORD_RESET_TOKEN_EXPIRE_MINUTES=30
 
 CORS_ORIGINS_RAW=http://localhost:5173
+FRONTEND_URL=http://localhost:5173
 
 SMTP_HOST=
 SMTP_PORT=587
