@@ -11,13 +11,15 @@
 --        -h <host> -U <user> -d <db> > /tmp/seed.sql
 --    cat /tmp/schema.sql /tmp/seed.sql > homexperia_v1.sql
 --
---  Contains: full schema for all 20 tables (admin_users, states, modules,
+--  Contains: full schema for all 24 tables (admin_users, states, modules,
 --  admin_user_module_permissions, refresh_tokens, password_reset_tokens,
 --  activity_logs, parent_categories, child_categories, room_categories,
 --  suppliers, supplier_child_categories, supplier_module_permissions,
 --  customers, customer_suppliers, customer_login_events, filters,
---  filter_values, products, product_filter_values) plus seed data for
---  states (36) and modules (25) — the read-only reference tables.
+--  filter_values, products, product_filter_values, product_upload_logs,
+--  product_upload_log_items, notification_templates,
+--  notification_template_suppliers) plus seed data for states (36) and
+--  modules (25) — the read-only reference tables.
 --  Deliberately excludes admin_users data: the super admin is created
 --  per-environment via `./setup.sh setup` / `python -m
 --  scripts.create_superadmin`, never baked into a checked-in file, since
@@ -39,7 +41,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict dSrkpAcIuhsvjlzNBckJS55Y8qFrIqlzXHW7cwk2uoqxfwmXBHqGP5w13Mrq2ki
+\restrict GtHS80ZH0jph9D8urLvNrC1b7zaHBjgs17e6Nal2D7EFcRFgLtffiVyiz6mjCZm
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -232,6 +234,34 @@ CREATE TABLE public.modules (
     id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: notification_template_suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notification_template_suppliers (
+    template_id uuid NOT NULL,
+    supplier_id uuid NOT NULL
+);
+
+
+--
+-- Name: notification_templates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.notification_templates (
+    heading character varying(250) NOT NULL,
+    message character varying(2000) NOT NULL,
+    image_url character varying(500),
+    scheduled_at timestamp with time zone NOT NULL,
+    is_sent boolean NOT NULL,
+    is_active boolean NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone
 );
 
 
@@ -514,6 +544,22 @@ ALTER TABLE ONLY public.modules
 
 ALTER TABLE ONLY public.modules
     ADD CONSTRAINT modules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: notification_template_suppliers notification_template_suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notification_template_suppliers
+    ADD CONSTRAINT notification_template_suppliers_pkey PRIMARY KEY (template_id, supplier_id);
+
+
+--
+-- Name: notification_templates notification_templates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notification_templates
+    ADD CONSTRAINT notification_templates_pkey PRIMARY KEY (id);
 
 
 --
@@ -997,6 +1043,22 @@ ALTER TABLE ONLY public.modules
 
 
 --
+-- Name: notification_template_suppliers notification_template_suppliers_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notification_template_suppliers
+    ADD CONSTRAINT notification_template_suppliers_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: notification_template_suppliers notification_template_suppliers_template_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.notification_template_suppliers
+    ADD CONSTRAINT notification_template_suppliers_template_id_fkey FOREIGN KEY (template_id) REFERENCES public.notification_templates(id) ON DELETE CASCADE;
+
+
+--
 -- Name: password_reset_tokens password_reset_tokens_admin_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1136,13 +1198,13 @@ ALTER TABLE ONLY public.suppliers
 -- PostgreSQL database dump complete
 --
 
-\unrestrict dSrkpAcIuhsvjlzNBckJS55Y8qFrIqlzXHW7cwk2uoqxfwmXBHqGP5w13Mrq2ki
+\unrestrict GtHS80ZH0jph9D8urLvNrC1b7zaHBjgs17e6Nal2D7EFcRFgLtffiVyiz6mjCZm
 
 --
 -- PostgreSQL database dump
 --
 
-\restrict GQvH7gv4A8gFTpJDGMgynZx1F92gHEIra0Pqe0IFIfW1qgHY4zv41hETQh5gho5
+\restrict 47czzcPKreAEavkc5D8HQCewf6x2poQb4U266HSK6uJd6wulQwxsBXbJeLSnaRC
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -1172,7 +1234,6 @@ INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_a
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.sub_admin', 'Sub Admin', '8a6b1865-5d4d-42fd-98f8-d6829e5a918b', 15, true, true, '69b691e6-6e54-4eb8-833b-552b09395216', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('logs', 'Logs', NULL, 17, false, true, 'e7d7a486-1a01-4828-be59-6143b58ea3ab', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('notification', 'Notification', NULL, 19, false, true, '1c15b4df-55ea-4b75-9573-3b256aa61683', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('notification.template', 'Template', '1c15b4df-55ea-4b75-9573-3b256aa61683', 20, false, true, 'd9882670-f535-4515-96d9-ccbb59ffce59', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('app_feedback', 'App Feedback', NULL, 21, false, true, '8f7b217c-420c-4e35-8a9d-eddeae21e4cc', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting', 'Setting', NULL, 22, false, true, '67211ddd-48ae-4935-ad6c-a150469b5b51', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting.change_password', 'Change Password', '67211ddd-48ae-4935-ad6c-a150469b5b51', 23, true, true, '4d14ca3a-a566-4613-aaac-929f17f396c4', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
@@ -1188,6 +1249,7 @@ INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_a
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.product', 'Product', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 6, true, true, '691e98ab-8e9f-4d0a-9ef7-fbcd398325e9', '2026-07-13 10:47:15.84916+05:30', '2026-07-15 11:13:52.708942+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.upload_files', 'Upload Files', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 11, true, true, '08387a0e-a14c-4413-9fac-ccd263b0799b', '2026-07-13 10:47:15.84916+05:30', '2026-07-17 11:34:20.010188+05:30');
 INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.log', 'Log', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 12, true, true, '5dea2e66-120b-40ff-bf40-e04859c6b90a', '2026-07-13 10:47:15.84916+05:30', '2026-07-17 11:34:20.010188+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('notification.template', 'Template', '1c15b4df-55ea-4b75-9573-3b256aa61683', 20, true, true, 'd9882670-f535-4515-96d9-ccbb59ffce59', '2026-07-13 10:47:15.84916+05:30', '2026-07-17 16:42:58.109446+05:30');
 
 
 --
@@ -1236,5 +1298,5 @@ INSERT INTO public.states (code, name, sort_order) VALUES ('PY', 'Puducherry', 3
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GQvH7gv4A8gFTpJDGMgynZx1F92gHEIra0Pqe0IFIfW1qgHY4zv41hETQh5gho5
+\unrestrict 47czzcPKreAEavkc5D8HQCewf6x2poQb4U266HSK6uJd6wulQwxsBXbJeLSnaRC
 

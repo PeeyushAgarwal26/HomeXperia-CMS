@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.base_repository import BaseRepository
@@ -31,3 +31,9 @@ class SupplierRepository(BaseRepository[Supplier]):
         stmt = select(Supplier.id).where(Supplier.id.in_(supplier_ids), Supplier.deleted_at.is_(None))
         result = await self.session.execute(stmt)
         return set(result.scalars().all())
+
+    async def count_active(self) -> int:
+        stmt = select(func.count()).select_from(Supplier).where(
+            Supplier.deleted_at.is_(None), Supplier.is_active.is_(True)
+        )
+        return (await self.session.scalar(stmt)) or 0
