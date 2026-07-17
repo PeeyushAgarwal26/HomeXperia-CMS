@@ -9,7 +9,6 @@ from sqlalchemy import select
 
 import app.db.models  # noqa: F401 — registers every table so cross-model FKs resolve
 from app.db.session import AsyncSessionFactory
-from app.modules.categories.models import ChildCategory, ParentCategory
 from app.modules.geo.models import State
 from app.modules.module_catalog.models import Module
 
@@ -65,19 +64,6 @@ MODULE_TREE: list[tuple[str, str, str | None, bool]] = [
 ]
 
 
-# (parent_name, [child_names]) — confirmed against the live site, 6 parents / 12
-# children exactly (see docs/06-legacy-site-audit.md §6). Read-only reference
-# data: no Master CRUD screen yet, seeded only so Suppliers -> Supplier
-# Categories Access has real rows to grant.
-CATEGORY_TREE: list[tuple[str, list[str]]] = [
-    ("FURNITURE", ["LAMINATES"]),
-    ("WALL", ["WALLPAPER", "PAINT", "WALL ART"]),
-    ("SOFA", ["SOFA COVER", "CUSHION"]),
-    ("FLOOR", ["RUGS", "TILES"]),
-    ("WINDOW", ["CURTAIN"]),
-    ("BED", ["PILLOW", "COMFORTER", "BEDSHEET"]),
-]
-
 
 async def seed_states(session) -> None:
     existing = await session.scalar(select(State.code).limit(1))
@@ -110,32 +96,10 @@ async def seed_module_catalog(session) -> None:
     print(f"Seeded {len(MODULE_TREE)} module catalog entries.")
 
 
-async def seed_categories(session) -> None:
-    existing = await session.scalar(select(ParentCategory.id).limit(1))
-    if existing:
-        print("Category catalog already seeded — skipping.")
-        return
-
-    total_children = 0
-    for parent_sort_order, (parent_name, child_names) in enumerate(CATEGORY_TREE):
-        parent = ParentCategory(name=parent_name, sort_order=parent_sort_order)
-        session.add(parent)
-        await session.flush()  # need parent.id before children can reference it
-        for child_sort_order, child_name in enumerate(child_names):
-            session.add(
-                ChildCategory(
-                    parent_category_id=parent.id, name=child_name, sort_order=child_sort_order
-                )
-            )
-            total_children += 1
-    print(f"Seeded {len(CATEGORY_TREE)} parent categories, {total_children} child categories.")
-
-
 async def main() -> None:
     async with AsyncSessionFactory() as session:
         await seed_states(session)
         await seed_module_catalog(session)
-        await seed_categories(session)
         await session.commit()
 
 

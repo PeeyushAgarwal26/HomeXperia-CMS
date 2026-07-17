@@ -30,7 +30,7 @@ class AdminUser(BaseModel, SoftDeleteMixin):
     )
 
     is_super_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    name: Mapped[str] = mapped_column(String(250), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
     email: Mapped[str] = mapped_column(String(255), nullable=False)
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False)

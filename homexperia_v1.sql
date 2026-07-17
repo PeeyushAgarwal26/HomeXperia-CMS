@@ -11,14 +11,21 @@
 --        -h <host> -U <user> -d <db> > /tmp/seed.sql
 --    cat /tmp/schema.sql /tmp/seed.sql > homexperia_v1.sql
 --
---  Contains: full schema for all 7 tables (admin_users, states, modules,
+--  Contains: full schema for all 20 tables (admin_users, states, modules,
 --  admin_user_module_permissions, refresh_tokens, password_reset_tokens,
---  activity_logs) plus seed data for states (36) and modules (24) — the
---  read-only reference tables. Deliberately excludes admin_users data: the
---  super admin is created per-environment via `./setup.sh setup` /
---  `python -m scripts.create_superadmin`, never baked into a checked-in
---  file, since there is no create-account page in this admin panel and a
---  shared credential in git would defeat the point.
+--  activity_logs, parent_categories, child_categories, room_categories,
+--  suppliers, supplier_child_categories, supplier_module_permissions,
+--  customers, customer_suppliers, customer_login_events, filters,
+--  filter_values, products, product_filter_values) plus seed data for
+--  states (36) and modules (25) — the read-only reference tables.
+--  Deliberately excludes admin_users data: the super admin is created
+--  per-environment via `./setup.sh setup` / `python -m
+--  scripts.create_superadmin`, never baked into a checked-in file, since
+--  there is no create-account page in this admin panel and a shared
+--  credential in git would defeat the point. Also excludes every other
+--  table's rows (categories, suppliers, customers, filters, products,
+--  room_categories, etc.) — those are real operational data, not
+--  reference/seed data.
 --
 --  ./setup.sh runs Alembic migrations + scripts/seed_reference_data.py by
 --  default (see docs/03-backend-architecture.md); this dump is a faster
@@ -30,7 +37,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict SNltkHEdWQPnScAxJSUX8tzb8T7XENJAbjqKmIfHTYQ3GLu2DKwa9ifaKwPP1uK
+\restrict uXVVrJLgy4AknaKdzt9q9TCxSP2FaoHE2WIMH7vI6vr85sVM4PEKQpx1iNlx9W2
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -88,7 +95,7 @@ CREATE TABLE public.admin_user_module_permissions (
 
 CREATE TABLE public.admin_users (
     is_super_admin boolean NOT NULL,
-    name character varying(150) NOT NULL,
+    name character varying(250) NOT NULL,
     date_of_birth date,
     email character varying(255) NOT NULL,
     phone_number character varying(20) NOT NULL,
@@ -101,6 +108,107 @@ CREATE TABLE public.admin_users (
     password_hash character varying(255) NOT NULL,
     is_active boolean NOT NULL,
     created_by uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone
+);
+
+
+--
+-- Name: child_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.child_categories (
+    parent_category_id uuid NOT NULL,
+    name character varying(250) NOT NULL,
+    icon_url character varying(500),
+    sort_order smallint NOT NULL,
+    is_active boolean NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone
+);
+
+
+--
+-- Name: customer_login_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_login_events (
+    id uuid NOT NULL,
+    customer_id uuid NOT NULL,
+    logged_in_at timestamp with time zone DEFAULT now() NOT NULL,
+    ip_address character varying(45)
+);
+
+
+--
+-- Name: customer_suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customer_suppliers (
+    customer_id uuid NOT NULL,
+    supplier_id uuid NOT NULL,
+    mapped_by uuid,
+    mapped_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: customers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.customers (
+    name character varying(250) NOT NULL,
+    date_of_start date,
+    email character varying(255),
+    phone_number character varying(20) NOT NULL,
+    gst_number character varying(20),
+    address character varying(255),
+    pin_code character varying(10),
+    state_code character varying(10),
+    city character varying(100),
+    profile_image_url character varying(500),
+    device_limit smallint NOT NULL,
+    active_device_count smallint NOT NULL,
+    last_login_at timestamp with time zone,
+    customer_code character varying(100) NOT NULL,
+    password_hash character varying(255) NOT NULL,
+    is_active boolean NOT NULL,
+    created_by uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone
+);
+
+
+--
+-- Name: filter_values; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.filter_values (
+    filter_id uuid NOT NULL,
+    child_category_id uuid NOT NULL,
+    supplier_id uuid NOT NULL,
+    value character varying(250) NOT NULL,
+    is_active boolean NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone
+);
+
+
+--
+-- Name: filters; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.filters (
+    name character varying(250) NOT NULL,
+    is_active boolean NOT NULL,
     id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -126,6 +234,22 @@ CREATE TABLE public.modules (
 
 
 --
+-- Name: parent_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.parent_categories (
+    name character varying(250) NOT NULL,
+    icon_url character varying(500),
+    sort_order smallint NOT NULL,
+    is_active boolean NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone
+);
+
+
+--
 -- Name: password_reset_tokens; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -137,6 +261,42 @@ CREATE TABLE public.password_reset_tokens (
     used_at timestamp with time zone,
     requested_ip character varying(45),
     created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: product_filter_values; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.product_filter_values (
+    product_id uuid NOT NULL,
+    filter_value_id uuid NOT NULL
+);
+
+
+--
+-- Name: products; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.products (
+    child_category_id uuid NOT NULL,
+    supplier_id uuid NOT NULL,
+    order_no integer NOT NULL,
+    catalog_name character varying(250) NOT NULL,
+    design_no character varying(100),
+    bar_code character varying(100) NOT NULL,
+    image_url character varying(500),
+    available_quantity integer,
+    rate numeric(10,2),
+    length numeric(10,2) NOT NULL,
+    width numeric(10,2) NOT NULL,
+    is_active boolean NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone,
+    shine_fabric smallint DEFAULT '0'::smallint NOT NULL,
+    fabric_transparency smallint DEFAULT '0'::smallint NOT NULL
 );
 
 
@@ -157,6 +317,21 @@ CREATE TABLE public.refresh_tokens (
 
 
 --
+-- Name: room_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.room_categories (
+    name character varying(250) NOT NULL,
+    order_no integer NOT NULL,
+    icon_url character varying(500),
+    is_active boolean NOT NULL,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: states; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -164,6 +339,57 @@ CREATE TABLE public.states (
     code character varying(10) NOT NULL,
     name character varying(100) NOT NULL,
     sort_order smallint NOT NULL
+);
+
+
+--
+-- Name: supplier_child_categories; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_child_categories (
+    supplier_id uuid NOT NULL,
+    child_category_id uuid NOT NULL,
+    granted_by uuid,
+    granted_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: supplier_module_permissions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.supplier_module_permissions (
+    supplier_id uuid NOT NULL,
+    module_id uuid NOT NULL,
+    granted_by uuid,
+    granted_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: suppliers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.suppliers (
+    name character varying(250) NOT NULL,
+    start_of_subscription date,
+    email character varying(255),
+    phone_number character varying(20) NOT NULL,
+    gst_number character varying(20),
+    address character varying(255),
+    pin_code character varying(10),
+    state_code character varying(10) NOT NULL,
+    city character varying(100) NOT NULL,
+    web_link character varying(500),
+    logo_url character varying(500),
+    username character varying(100) NOT NULL,
+    password_hash character varying(255) NOT NULL,
+    is_active boolean NOT NULL,
+    created_by uuid,
+    id uuid NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deleted_at timestamp with time zone
 );
 
 
@@ -192,6 +418,54 @@ ALTER TABLE ONLY public.admin_users
 
 
 --
+-- Name: child_categories child_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.child_categories
+    ADD CONSTRAINT child_categories_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: customer_login_events customer_login_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_login_events
+    ADD CONSTRAINT customer_login_events_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: customer_suppliers customer_suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_suppliers
+    ADD CONSTRAINT customer_suppliers_pkey PRIMARY KEY (customer_id, supplier_id);
+
+
+--
+-- Name: customers customers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: filter_values filter_values_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filter_values
+    ADD CONSTRAINT filter_values_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: filters filters_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filters
+    ADD CONSTRAINT filters_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: modules modules_key_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -205,6 +479,14 @@ ALTER TABLE ONLY public.modules
 
 ALTER TABLE ONLY public.modules
     ADD CONSTRAINT modules_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: parent_categories parent_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.parent_categories
+    ADD CONSTRAINT parent_categories_pkey PRIMARY KEY (id);
 
 
 --
@@ -224,6 +506,22 @@ ALTER TABLE ONLY public.password_reset_tokens
 
 
 --
+-- Name: product_filter_values product_filter_values_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_filter_values
+    ADD CONSTRAINT product_filter_values_pkey PRIMARY KEY (product_id, filter_value_id);
+
+
+--
+-- Name: products products_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: refresh_tokens refresh_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -240,6 +538,14 @@ ALTER TABLE ONLY public.refresh_tokens
 
 
 --
+-- Name: room_categories room_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.room_categories
+    ADD CONSTRAINT room_categories_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: states states_name_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -253,6 +559,30 @@ ALTER TABLE ONLY public.states
 
 ALTER TABLE ONLY public.states
     ADD CONSTRAINT states_pkey PRIMARY KEY (code);
+
+
+--
+-- Name: supplier_child_categories supplier_child_categories_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_child_categories
+    ADD CONSTRAINT supplier_child_categories_pkey PRIMARY KEY (supplier_id, child_category_id);
+
+
+--
+-- Name: supplier_module_permissions supplier_module_permissions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_module_permissions
+    ADD CONSTRAINT supplier_module_permissions_pkey PRIMARY KEY (supplier_id, module_id);
+
+
+--
+-- Name: suppliers suppliers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_pkey PRIMARY KEY (id);
 
 
 --
@@ -305,10 +635,94 @@ CREATE UNIQUE INDEX ix_admin_users_username ON public.admin_users USING btree (u
 
 
 --
+-- Name: ix_child_categories_parent_category_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_child_categories_parent_category_id ON public.child_categories USING btree (parent_category_id);
+
+
+--
+-- Name: ix_customer_login_events_customer_id_logged_in_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_customer_login_events_customer_id_logged_in_at ON public.customer_login_events USING btree (customer_id, logged_in_at);
+
+
+--
+-- Name: ix_customers_customer_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_customers_customer_code ON public.customers USING btree (customer_code) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: ix_customers_email; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_customers_email ON public.customers USING btree (email) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: ix_customers_is_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_customers_is_active ON public.customers USING btree (is_active);
+
+
+--
+-- Name: ix_customers_phone_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_customers_phone_number ON public.customers USING btree (phone_number) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: ix_customers_state_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_customers_state_code ON public.customers USING btree (state_code);
+
+
+--
+-- Name: ix_filter_values_child_category_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_filter_values_child_category_id ON public.filter_values USING btree (child_category_id);
+
+
+--
+-- Name: ix_filter_values_filter_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_filter_values_filter_id ON public.filter_values USING btree (filter_id);
+
+
+--
+-- Name: ix_filter_values_supplier_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_filter_values_supplier_id ON public.filter_values USING btree (supplier_id);
+
+
+--
+-- Name: ix_filters_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_filters_name ON public.filters USING btree (name) WHERE (deleted_at IS NULL);
+
+
+--
 -- Name: ix_modules_parent_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_modules_parent_id ON public.modules USING btree (parent_id);
+
+
+--
+-- Name: ix_parent_categories_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_parent_categories_name ON public.parent_categories USING btree (name) WHERE (deleted_at IS NULL);
 
 
 --
@@ -319,10 +733,66 @@ CREATE INDEX ix_password_reset_tokens_admin_user_id ON public.password_reset_tok
 
 
 --
+-- Name: ix_products_bar_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_products_bar_code ON public.products USING btree (bar_code);
+
+
+--
+-- Name: ix_products_child_category_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_products_child_category_id ON public.products USING btree (child_category_id);
+
+
+--
+-- Name: ix_products_is_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_products_is_active ON public.products USING btree (is_active);
+
+
+--
+-- Name: ix_products_supplier_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_products_supplier_id ON public.products USING btree (supplier_id);
+
+
+--
 -- Name: ix_refresh_tokens_admin_user_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_refresh_tokens_admin_user_id ON public.refresh_tokens USING btree (admin_user_id);
+
+
+--
+-- Name: ix_suppliers_is_active; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_suppliers_is_active ON public.suppliers USING btree (is_active);
+
+
+--
+-- Name: ix_suppliers_phone_number; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_suppliers_phone_number ON public.suppliers USING btree (phone_number) WHERE (deleted_at IS NULL);
+
+
+--
+-- Name: ix_suppliers_state_code; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_suppliers_state_code ON public.suppliers USING btree (state_code);
+
+
+--
+-- Name: ix_suppliers_username; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ix_suppliers_username ON public.suppliers USING btree (username) WHERE (deleted_at IS NULL);
 
 
 --
@@ -374,6 +844,86 @@ ALTER TABLE ONLY public.admin_users
 
 
 --
+-- Name: child_categories child_categories_parent_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.child_categories
+    ADD CONSTRAINT child_categories_parent_category_id_fkey FOREIGN KEY (parent_category_id) REFERENCES public.parent_categories(id);
+
+
+--
+-- Name: customer_login_events customer_login_events_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_login_events
+    ADD CONSTRAINT customer_login_events_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customer_suppliers customer_suppliers_customer_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_suppliers
+    ADD CONSTRAINT customer_suppliers_customer_id_fkey FOREIGN KEY (customer_id) REFERENCES public.customers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customer_suppliers customer_suppliers_mapped_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_suppliers
+    ADD CONSTRAINT customer_suppliers_mapped_by_fkey FOREIGN KEY (mapped_by) REFERENCES public.admin_users(id);
+
+
+--
+-- Name: customer_suppliers customer_suppliers_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customer_suppliers
+    ADD CONSTRAINT customer_suppliers_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: customers customers_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.admin_users(id);
+
+
+--
+-- Name: customers customers_state_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.customers
+    ADD CONSTRAINT customers_state_code_fkey FOREIGN KEY (state_code) REFERENCES public.states(code);
+
+
+--
+-- Name: filter_values filter_values_child_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filter_values
+    ADD CONSTRAINT filter_values_child_category_id_fkey FOREIGN KEY (child_category_id) REFERENCES public.child_categories(id);
+
+
+--
+-- Name: filter_values filter_values_filter_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filter_values
+    ADD CONSTRAINT filter_values_filter_id_fkey FOREIGN KEY (filter_id) REFERENCES public.filters(id);
+
+
+--
+-- Name: filter_values filter_values_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.filter_values
+    ADD CONSTRAINT filter_values_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
 -- Name: modules modules_parent_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -390,6 +940,38 @@ ALTER TABLE ONLY public.password_reset_tokens
 
 
 --
+-- Name: product_filter_values product_filter_values_filter_value_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_filter_values
+    ADD CONSTRAINT product_filter_values_filter_value_id_fkey FOREIGN KEY (filter_value_id) REFERENCES public.filter_values(id) ON DELETE CASCADE;
+
+
+--
+-- Name: product_filter_values product_filter_values_product_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.product_filter_values
+    ADD CONSTRAINT product_filter_values_product_id_fkey FOREIGN KEY (product_id) REFERENCES public.products(id) ON DELETE CASCADE;
+
+
+--
+-- Name: products products_child_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_child_category_id_fkey FOREIGN KEY (child_category_id) REFERENCES public.child_categories(id);
+
+
+--
+-- Name: products products_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.products
+    ADD CONSTRAINT products_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id);
+
+
+--
 -- Name: refresh_tokens refresh_tokens_admin_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -398,16 +980,80 @@ ALTER TABLE ONLY public.refresh_tokens
 
 
 --
+-- Name: supplier_child_categories supplier_child_categories_child_category_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_child_categories
+    ADD CONSTRAINT supplier_child_categories_child_category_id_fkey FOREIGN KEY (child_category_id) REFERENCES public.child_categories(id) ON DELETE CASCADE;
+
+
+--
+-- Name: supplier_child_categories supplier_child_categories_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_child_categories
+    ADD CONSTRAINT supplier_child_categories_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.admin_users(id);
+
+
+--
+-- Name: supplier_child_categories supplier_child_categories_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_child_categories
+    ADD CONSTRAINT supplier_child_categories_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: supplier_module_permissions supplier_module_permissions_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_module_permissions
+    ADD CONSTRAINT supplier_module_permissions_granted_by_fkey FOREIGN KEY (granted_by) REFERENCES public.admin_users(id);
+
+
+--
+-- Name: supplier_module_permissions supplier_module_permissions_module_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_module_permissions
+    ADD CONSTRAINT supplier_module_permissions_module_id_fkey FOREIGN KEY (module_id) REFERENCES public.modules(id) ON DELETE CASCADE;
+
+
+--
+-- Name: supplier_module_permissions supplier_module_permissions_supplier_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.supplier_module_permissions
+    ADD CONSTRAINT supplier_module_permissions_supplier_id_fkey FOREIGN KEY (supplier_id) REFERENCES public.suppliers(id) ON DELETE CASCADE;
+
+
+--
+-- Name: suppliers suppliers_created_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.admin_users(id);
+
+
+--
+-- Name: suppliers suppliers_state_code_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.suppliers
+    ADD CONSTRAINT suppliers_state_code_fkey FOREIGN KEY (state_code) REFERENCES public.states(code);
+
+
+--
 -- PostgreSQL database dump complete
 --
 
-\unrestrict SNltkHEdWQPnScAxJSUX8tzb8T7XENJAbjqKmIfHTYQ3GLu2DKwa9ifaKwPP1uK
+\unrestrict uXVVrJLgy4AknaKdzt9q9TCxSP2FaoHE2WIMH7vI6vr85sVM4PEKQpx1iNlx9W2
 
 --
 -- PostgreSQL database dump
 --
 
-\restrict SvoUDrXSAIE8HdwWPZgggyQJ2R5nlhuyVHi8VFBch8FN5QcL4u6ozLXiO7YGs04
+\restrict Fl1hwGYI2Yq5m1wiWLsbayuXsK26kux2a9aElZtpFtXkBrJvSo03nJ5SPoSqaBr
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -428,30 +1074,31 @@ SET row_security = off;
 -- Data for Name: modules; Type: TABLE DATA; Schema: public; Owner: -
 --
 
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('dashboard', 'Dashboard', NULL, 0, true, true, 'b1bff791-500e-49d5-bd55-5ae1e68d33c9', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master', 'Master', NULL, 1, false, true, '8ba546d9-0f2d-4ac4-a64a-303e220e6d22', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.parent_category', 'Parent Category', '8ba546d9-0f2d-4ac4-a64a-303e220e6d22', 2, false, true, 'b495b7ef-43ef-4dfa-8aed-110b2eef6a30', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.child_category', 'Child Category', '8ba546d9-0f2d-4ac4-a64a-303e220e6d22', 3, false, true, 'c4c4c8c7-97a1-4586-85fe-09978afc4d8e', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.filter_value', 'Filter Value', '8ba546d9-0f2d-4ac4-a64a-303e220e6d22', 4, false, true, 'ca8bcaa6-16cc-4a8f-9ca6-9a6173a92ad0', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity', 'Activity', NULL, 5, false, true, '99e63ee4-f7e5-4ed4-9377-9a23fc7c9b99', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity.orders', 'Orders', '99e63ee4-f7e5-4ed4-9377-9a23fc7c9b99', 6, false, true, 'e8021bc1-2264-43d8-b310-0ba8976069e5', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity.filter', 'Filter', '99e63ee4-f7e5-4ed4-9377-9a23fc7c9b99', 7, false, true, 'c2a930c1-421e-4881-9524-54dbef5967bf', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity.product', 'Product', '99e63ee4-f7e5-4ed4-9377-9a23fc7c9b99', 8, false, true, '4dc1394f-a747-4d2a-9100-718c03d3ce07', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product', 'Upload Product', NULL, 9, false, true, 'a151c33c-2057-4fcb-a42f-c1af2e84efd6', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.upload_files', 'Upload Files', 'a151c33c-2057-4fcb-a42f-c1af2e84efd6', 10, false, true, 'b6ce2285-90a3-4c8a-bba5-321be120d360', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.logs', 'Logs', 'a151c33c-2057-4fcb-a42f-c1af2e84efd6', 11, false, true, 'dc47920e-c1a9-4c1b-93b8-15d9682e81ee', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management', 'User Management', NULL, 12, true, true, 'a3370636-b486-4b55-9fef-1291df04a6a3', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.customer', 'Customer', 'a3370636-b486-4b55-9fef-1291df04a6a3', 13, false, true, '72326fae-6b48-49f0-af3b-60b96351eb1c', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.sub_admin', 'Sub Admin', 'a3370636-b486-4b55-9fef-1291df04a6a3', 14, true, true, 'deb77d56-5a26-4d2b-ad91-7c08385edf72', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.suppliers', 'Suppliers', 'a3370636-b486-4b55-9fef-1291df04a6a3', 15, false, true, '0b5dde46-6172-4141-806b-ea36f5873c68', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('logs', 'Logs', NULL, 16, false, true, '159b12bb-b748-472e-8642-99c291f182e2', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('logs.customer_login_history', 'Customer Login History', '159b12bb-b748-472e-8642-99c291f182e2', 17, false, true, 'a8a676ca-fc8b-4776-819a-190a9467177f', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('notification', 'Notification', NULL, 18, false, true, '4b0a16e4-b53f-4f41-bdd3-9d3d4ed498be', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting', 'Setting', NULL, 19, false, true, '9f758e8f-03ad-45ec-a646-37827c318124', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting.change_password', 'Change Password', '9f758e8f-03ad-45ec-a646-37827c318124', 20, true, true, '9d1c4a42-8f59-423f-bcd8-00d98ab57a3d', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting.log_off', 'Log Off', '9f758e8f-03ad-45ec-a646-37827c318124', 21, false, true, '3bd30f83-fb16-4b9d-b91f-0452947ca08f', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('app_feedback', 'App Feedback', NULL, 22, false, true, '1bdb0795-da8e-448c-8673-9a6088caa479', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
-INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('app_feedback.template', 'Template', '1bdb0795-da8e-448c-8673-9a6088caa479', 23, false, true, 'f1135afb-3a2f-44b3-8cfd-98ec8b45a56b', '2026-07-10 15:09:55.59192+05:30', '2026-07-10 15:09:55.59192+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('dashboard', 'Dashboard', NULL, 0, true, true, 'a8ec61d1-ab84-4599-8e47-bbdeda1e6fef', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.room_category', 'Room Category', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 7, false, true, '725da421-96f4-47f5-8431-3a31060cacf4', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity', 'Activity', NULL, 8, false, true, '2eff812a-4ab3-4d1b-a9e8-b15c25364f43', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('activity.orders', 'Orders', '2eff812a-4ab3-4d1b-a9e8-b15c25364f43', 9, false, true, '14c83c85-6a05-4d0a-a23e-e3e08f7e3dcd', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product', 'Upload Product', NULL, 10, false, true, 'b8e747d4-d24b-468c-b44c-0c300c7254bc', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.upload_files', 'Upload Files', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 11, false, true, '08387a0e-a14c-4413-9fac-ccd263b0799b', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('upload_product.log', 'Log', 'b8e747d4-d24b-468c-b44c-0c300c7254bc', 12, false, true, '5dea2e66-120b-40ff-bf40-e04859c6b90a', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management', 'User Management', NULL, 13, true, true, '8a6b1865-5d4d-42fd-98f8-d6829e5a918b', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.sub_admin', 'Sub Admin', '8a6b1865-5d4d-42fd-98f8-d6829e5a918b', 15, true, true, '69b691e6-6e54-4eb8-833b-552b09395216', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('logs', 'Logs', NULL, 17, false, true, 'e7d7a486-1a01-4828-be59-6143b58ea3ab', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('notification', 'Notification', NULL, 19, false, true, '1c15b4df-55ea-4b75-9573-3b256aa61683', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('notification.template', 'Template', '1c15b4df-55ea-4b75-9573-3b256aa61683', 20, false, true, 'd9882670-f535-4515-96d9-ccbb59ffce59', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('app_feedback', 'App Feedback', NULL, 21, false, true, '8f7b217c-420c-4e35-8a9d-eddeae21e4cc', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting', 'Setting', NULL, 22, false, true, '67211ddd-48ae-4935-ad6c-a150469b5b51', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting.change_password', 'Change Password', '67211ddd-48ae-4935-ad6c-a150469b5b51', 23, true, true, '4d14ca3a-a566-4613-aaac-929f17f396c4', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('setting.log_off', 'Log Off', '67211ddd-48ae-4935-ad6c-a150469b5b51', 24, false, true, 'bca2cde4-7c80-440e-9d77-f4548ed9a191', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 10:47:15.84916+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.customer', 'Customer', '8a6b1865-5d4d-42fd-98f8-d6829e5a918b', 14, true, true, '80c6b6c9-25fd-4cf7-891c-c7ad43c50587', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 14:13:15.618263+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('user_management.suppliers', 'Suppliers', '8a6b1865-5d4d-42fd-98f8-d6829e5a918b', 16, true, true, '7fb7decd-1174-45fa-8227-60e70827db5c', '2026-07-13 10:47:15.84916+05:30', '2026-07-13 14:13:15.618263+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('logs.customer_login_history', 'Customer Login History', 'e7d7a486-1a01-4828-be59-6143b58ea3ab', 18, true, true, 'eaea4cc4-a170-4d37-8cda-ba03f3c0c79b', '2026-07-13 10:47:15.84916+05:30', '2026-07-14 11:20:40.890941+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master', 'Master', NULL, 1, true, true, '63c2805d-5527-4291-bfb6-44da8e6e92d3', '2026-07-13 10:47:15.84916+05:30', '2026-07-14 13:16:06.498611+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.parent_category', 'Parent Category', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 2, true, true, '9302553d-fb25-4877-b88e-8bdd4de72356', '2026-07-13 10:47:15.84916+05:30', '2026-07-14 13:16:06.498611+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.child_category', 'Child Category', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 3, true, true, '01ded099-96a9-4e68-918e-15b142668ffa', '2026-07-13 10:47:15.84916+05:30', '2026-07-14 13:16:06.498611+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.filter', 'Filter', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 4, true, true, '8545d6d7-1e6e-4f72-ab88-9bd143703c35', '2026-07-13 10:47:15.84916+05:30', '2026-07-15 10:57:37.646947+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.filter_value', 'Filter Value', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 5, true, true, '78df237c-e166-47bc-b478-30491344ec7a', '2026-07-13 10:47:15.84916+05:30', '2026-07-15 10:57:37.646947+05:30');
+INSERT INTO public.modules (key, name, parent_id, sort_order, is_buildable, is_active, id, created_at, updated_at) VALUES ('master.product', 'Product', '63c2805d-5527-4291-bfb6-44da8e6e92d3', 6, true, true, '691e98ab-8e9f-4d0a-9ef7-fbcd398325e9', '2026-07-13 10:47:15.84916+05:30', '2026-07-15 11:13:52.708942+05:30');
 
 
 --
@@ -500,5 +1147,5 @@ INSERT INTO public.states (code, name, sort_order) VALUES ('PY', 'Puducherry', 3
 -- PostgreSQL database dump complete
 --
 
-\unrestrict SvoUDrXSAIE8HdwWPZgggyQJ2R5nlhuyVHi8VFBch8FN5QcL4u6ozLXiO7YGs04
+\unrestrict Fl1hwGYI2Yq5m1wiWLsbayuXsK26kux2a9aElZtpFtXkBrJvSo03nJ5SPoSqaBr
 

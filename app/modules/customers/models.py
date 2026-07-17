@@ -26,7 +26,7 @@ class Customer(BaseModel, SoftDeleteMixin):
         Index("ix_customers_state_code", "state_code"),
     )
 
-    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    name: Mapped[str] = mapped_column(String(250), nullable=False)
     date_of_start: Mapped[date | None] = mapped_column(Date, nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False)

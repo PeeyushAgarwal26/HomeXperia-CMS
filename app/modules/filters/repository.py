@@ -1,0 +1,41 @@
+import uuid
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.common.base_repository import BaseRepository
+from app.modules.filters.models import Filter, FilterValue
+
+
+class FilterRepository(BaseRepository[Filter]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(Filter, session)
+
+    async def name_taken(self, name: str, exclude_id: uuid.UUID | None = None) -> bool:
+        stmt = self._base_select().where(Filter.name == name)
+        if exclude_id is not None:
+            stmt = stmt.where(Filter.id != exclude_id)
+        result = await self.session.execute(stmt.limit(1))
+        return result.first() is not None
+
+
+class FilterValueRepository(BaseRepository[FilterValue]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(FilterValue, session)
+
+    async def list_applicable(
+        self, child_category_id: uuid.UUID, supplier_id: uuid.UUID
+    ) -> list[FilterValue]:
+        """Every active FilterValue scoped to this exact Child Category + Supplier pair —
+        this is what drives Product's dynamic "Product Filters" section: which Filters
+        even show up, and what options each one offers, depends entirely on this."""
+        stmt = (
+            self._base_select()
+            .where(
+                FilterValue.child_category_id == child_category_id,
+                FilterValue.supplier_id == supplier_id,
+                FilterValue.is_active.is_(True),
+            )
+            .order_by(FilterValue.value)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

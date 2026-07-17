@@ -3,7 +3,25 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.base_repository import BaseRepository
 from app.modules.categories.models import ChildCategory, ParentCategory
+
+
+class ParentCategoryRepository(BaseRepository[ParentCategory]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(ParentCategory, session)
+
+    async def name_taken(self, name: str, exclude_id: uuid.UUID | None = None) -> bool:
+        stmt = self._base_select().where(ParentCategory.name == name)
+        if exclude_id is not None:
+            stmt = stmt.where(ParentCategory.id != exclude_id)
+        result = await self.session.execute(stmt.limit(1))
+        return result.first() is not None
+
+
+class ChildCategoryRepository(BaseRepository[ChildCategory]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(ChildCategory, session)
 
 
 class CategoryRepository:
@@ -11,8 +29,10 @@ class CategoryRepository:
         self.session = session
 
     async def list_parents(self) -> list[ParentCategory]:
-        stmt = select(ParentCategory).where(ParentCategory.is_active.is_(True)).order_by(
-            ParentCategory.sort_order
+        stmt = (
+            select(ParentCategory)
+            .where(ParentCategory.is_active.is_(True), ParentCategory.deleted_at.is_(None))
+            .order_by(ParentCategory.sort_order)
         )
         result = await self.session.execute(stmt)
         return list(result.scalars().all())

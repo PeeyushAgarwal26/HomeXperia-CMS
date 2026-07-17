@@ -38,7 +38,7 @@ class SupplierDetail(BaseModel):
 
 
 class SupplierCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=150)
+    name: str = Field(min_length=1, max_length=250)
     start_of_subscription: date | None = None
     email: EmailStr | None = None
     phone_number: str = Field(min_length=10, max_length=20)
@@ -61,7 +61,7 @@ class SupplierCreateRequest(BaseModel):
 
 
 class SupplierUpdateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=150)
+    name: str = Field(min_length=1, max_length=250)
     start_of_subscription: date | None = None
     email: EmailStr | None = None
     phone_number: str = Field(min_length=10, max_length=20)

@@ -39,7 +39,7 @@ class CustomerDetail(BaseModel):
 
 
 class CustomerCreateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=150)
+    name: str = Field(min_length=1, max_length=250)
     date_of_start: date | None = None
     email: EmailStr | None = None
     phone_number: str = Field(min_length=10, max_length=20)
@@ -62,7 +62,7 @@ class CustomerCreateRequest(BaseModel):
 
 
 class CustomerUpdateRequest(BaseModel):
-    name: str = Field(min_length=1, max_length=150)
+    name: str = Field(min_length=1, max_length=250)
     date_of_start: date | None = None
     email: EmailStr | None = None
     phone_number: str = Field(min_length=10, max_length=20)
