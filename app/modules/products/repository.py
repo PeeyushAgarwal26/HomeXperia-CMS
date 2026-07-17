@@ -11,6 +11,13 @@ class ProductRepository(BaseRepository[Product]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Product, session)
 
+    async def get_by_supplier_and_bar_code(self, supplier_id: uuid.UUID, bar_code: str) -> Product | None:
+        """Bulk upload's natural key for "is this the same product" — lets a re-uploaded
+        sheet update rather than duplicate a product it already created."""
+        stmt = self._base_select().where(Product.supplier_id == supplier_id, Product.bar_code == bar_code)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
 
 class ProductFilterValueRepository:
     def __init__(self, session: AsyncSession) -> None:

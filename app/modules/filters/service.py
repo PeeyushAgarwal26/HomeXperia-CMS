@@ -2,6 +2,7 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.constants import PRODUCT_UPLOAD_FIXED_COLUMNS
 from app.common.pagination import PaginationParams, SortParams
 from app.exceptions.http_exceptions import ConflictException, NotFoundException
 from app.modules.categories.repository import ChildCategoryRepository
@@ -40,7 +41,15 @@ class FilterService:
             raise NotFoundException("Filter")
         return item
 
+    @staticmethod
+    def _check_not_reserved(name: str) -> None:
+        # The bulk product upload template reserves these headers for fixed product fields —
+        # a Filter sharing one of these names would make its column ambiguous to the parser.
+        if name.strip().lower() in {c.lower() for c in PRODUCT_UPLOAD_FIXED_COLUMNS}:
+            raise ConflictException(f'"{name}" is reserved and cannot be used as a filter name.')
+
     async def create(self, data: FilterCreateRequest) -> Filter:
+        self._check_not_reserved(data.name)
         if await self.repository.name_taken(data.name):
             raise ConflictException("This filter name is already in use.")
         item = await self.repository.create(data.model_dump())
@@ -48,6 +57,7 @@ class FilterService:
 
     async def update(self, filter_id: uuid.UUID, data: FilterUpdateRequest) -> Filter:
         await self.get_filter(filter_id)
+        self._check_not_reserved(data.name)
         if await self.repository.name_taken(data.name, exclude_id=filter_id):
             raise ConflictException("This filter name is already in use.")
         await self.repository.update(filter_id, data.model_dump())
@@ -126,13 +136,23 @@ class FilterValueService:
             )
         )[0]
 
-    async def _check_refs(self, data: FilterValueCreateRequest | FilterValueUpdateRequest) -> None:
+    async def _check_refs(
+        self,
+        data: FilterValueCreateRequest | FilterValueUpdateRequest,
+        exclude_id: uuid.UUID | None = None,
+    ) -> None:
         if await self.filter_repository.get_by_id(data.filter_id) is None:
             raise NotFoundException("Filter")
         if await self.child_category_repository.get_by_id(data.child_category_id) is None:
             raise NotFoundException("Child category")
         if await self.supplier_repository.get_by_id(data.supplier_id) is None:
             raise NotFoundException("Supplier")
+        if await self.repository.value_taken(
+            data.filter_id, data.child_category_id, data.supplier_id, data.value, exclude_id=exclude_id
+        ):
+            raise ConflictException(
+                f'"{data.value}" already exists for this filter, category, and supplier.'
+            )
 
     async def create(self, data: FilterValueCreateRequest) -> FilterValue:
         await self._check_refs(data)
@@ -141,7 +161,7 @@ class FilterValueService:
 
     async def update(self, value_id: uuid.UUID, data: FilterValueUpdateRequest) -> FilterValue:
         await self.get_value(value_id)
-        await self._check_refs(data)
+        await self._check_refs(data, exclude_id=value_id)
         await self.repository.update(value_id, data.model_dump())
         return await self.get_value(value_id)
 
