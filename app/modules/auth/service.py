@@ -15,11 +15,16 @@ from app.core.security import (
     hash_token,
     verify_password,
 )
-from app.exceptions.http_exceptions import BadRequestException, ForbiddenException, UnauthorizedException
+from app.exceptions.http_exceptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    UnauthorizedException,
+)
 from app.modules.admin_users.models import AdminUser, AdminUserModulePermission
 from app.modules.admin_users.repository import AdminUserRepository
 from app.modules.auth.repository import PasswordResetTokenRepository, RefreshTokenRepository
-from app.modules.auth.schemas import AdminUserProfile, LoginResponse, TokenPair
+from app.modules.auth.schemas import AdminUserProfile, LoginResponse, TokenPair, UpdateMyProfileRequest
 from app.modules.module_catalog.models import Module
 from app.services.email import send_email
 
@@ -152,6 +157,17 @@ class AuthService:
         # works until it naturally expires, but no refresh will succeed afterward
         # on any device. Simpler and still secure; see 04-api-reference.md note.
         await self.refresh_token_repo.revoke_all_for_admin_user(admin_user.id)
+
+    async def update_my_profile(self, admin_user: AdminUser, data: UpdateMyProfileRequest) -> AdminUser:
+        if await self.admin_user_repo.email_taken(data.email, exclude_id=admin_user.id):
+            raise ConflictException("This email is already in use.")
+        if await self.admin_user_repo.phone_number_taken(data.phone_number, exclude_id=admin_user.id):
+            raise ConflictException("This phone number is already in use.")
+
+        await self.admin_user_repo.update(admin_user.id, data.model_dump())
+        updated = await self.admin_user_repo.get_by_id(admin_user.id)
+        assert updated is not None
+        return updated
 
     async def get_permitted_module_keys(self, admin_user: AdminUser) -> list[str]:
         if admin_user.is_super_admin:

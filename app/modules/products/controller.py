@@ -41,8 +41,6 @@ def _to_detail(item: Product, filter_value_ids: list[uuid.UUID]) -> ProductDetai
         image_url=item.image_url,
         available_quantity=item.available_quantity,
         rate=float(item.rate) if item.rate is not None else None,
-        shine_fabric=item.shine_fabric,
-        fabric_transparency=item.fabric_transparency,
         length=float(item.length),
         width=float(item.width),
         is_active=item.is_active,
@@ -65,8 +63,6 @@ def _to_list_item(item: Product, sno: int) -> ProductListItem:
         image_url=item.image_url,
         available_quantity=item.available_quantity,
         rate=float(item.rate) if item.rate is not None else None,
-        shine_fabric=item.shine_fabric,
-        fabric_transparency=item.fabric_transparency,
         length=float(item.length),
         width=float(item.width),
         is_active=item.is_active,
@@ -127,7 +123,7 @@ async def export_products(
     items = await service.list_for_export(filters.search, child_category_id, supplier_id)
     headers = [
         "Sno", "Order No", "Category", "Catalog Name", "Design No", "Bar Code",
-        "Available Quantity", "Rate", "Shine Fabric", "Fabric Transparency", "Length", "Width", "Active",
+        "Available Quantity", "Rate", "Length", "Width", "Active",
     ]
     rows = [
         [
@@ -139,8 +135,6 @@ async def export_products(
             item.bar_code,
             item.available_quantity if item.available_quantity is not None else "",
             float(item.rate) if item.rate is not None else "",
-            item.shine_fabric,
-            item.fabric_transparency,
             float(item.length),
             float(item.width),
             "Yes" if item.is_active else "No",

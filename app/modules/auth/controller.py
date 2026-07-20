@@ -13,9 +13,11 @@ from app.modules.auth.schemas import (
     LoginResponse,
     LogoutRequest,
     MeResponse,
+    MyProfileResponse,
     RefreshRequest,
     ResetPasswordRequest,
     TokenPair,
+    UpdateMyProfileRequest,
 )
 from app.modules.auth.service import AuthService
 
@@ -109,4 +111,24 @@ async def me(
             is_super_admin=admin_user.is_super_admin,
             permitted_module_keys=permitted_module_keys,
         )
+    )
+
+
+@router.get("/profile", response_model=APIResponse[MyProfileResponse])
+async def get_my_profile(
+    admin_user: AdminUser = Depends(get_current_user),
+) -> APIResponse:
+    return controller.success(data=MyProfileResponse.model_validate(admin_user, from_attributes=True))
+
+
+@router.put("/profile", response_model=APIResponse[MyProfileResponse])
+async def update_my_profile(
+    body: UpdateMyProfileRequest,
+    admin_user: AdminUser = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    updated = await AuthService(session).update_my_profile(admin_user, body)
+    return controller.success(
+        data=MyProfileResponse.model_validate(updated, from_attributes=True),
+        message="Profile updated successfully.",
     )

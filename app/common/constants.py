@@ -7,8 +7,6 @@ PRODUCT_UPLOAD_FIXED_COLUMNS = [
     "Image",
     "Available Quantity",
     "Rate",
-    "Shine Fabric",
-    "Fabric Transparency",
     "Length",
     "Width",
 ]

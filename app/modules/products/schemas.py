@@ -17,8 +17,6 @@ class ProductListItem(BaseModel):
     image_url: str | None
     available_quantity: int | None
     rate: float | None
-    shine_fabric: int
-    fabric_transparency: int
     length: float
     width: float
     is_active: bool
@@ -35,8 +33,6 @@ class ProductDetail(BaseModel):
     image_url: str | None
     available_quantity: int | None
     rate: float | None
-    shine_fabric: int
-    fabric_transparency: int
     length: float
     width: float
     is_active: bool
@@ -53,8 +49,6 @@ class ProductCreateRequest(BaseModel):
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    shine_fabric: int = Field(ge=0, le=5)
-    fabric_transparency: int = Field(ge=0, le=1)
     length: float
     width: float
     filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
@@ -70,8 +64,6 @@ class ProductUpdateRequest(BaseModel):
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    shine_fabric: int = Field(ge=0, le=5)
-    fabric_transparency: int = Field(ge=0, le=1)
     length: float
     width: float
     filter_value_ids: list[uuid.UUID] = Field(default_factory=list)

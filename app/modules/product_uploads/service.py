@@ -226,7 +226,7 @@ class ProductUploadService:
                 if image_content is None:
                     error_message = f'Image "{image_ref}" was not found in the uploaded zip.'
 
-            order_no = available_quantity = rate = shine_fabric = fabric_transparency = None
+            order_no = available_quantity = rate = None
             length = width = None
             if error_message is None:
                 try:
@@ -235,8 +235,6 @@ class ProductUploadService:
                     available_quantity = int(float(available_quantity)) if available_quantity else None
                     rate = record.get("Rate") or None
                     rate = float(rate) if rate else None
-                    shine_fabric = int(float(record.get("Shine Fabric") or 0))
-                    fabric_transparency = int(float(record.get("Fabric Transparency") or 0))
                     length = float(record["Length"])
                     width = float(record["Width"])
                 except (TypeError, ValueError):
@@ -264,8 +262,6 @@ class ProductUploadService:
                         "image_url": image_url,
                         "available_quantity": available_quantity,
                         "rate": rate,
-                        "shine_fabric": shine_fabric,
-                        "fabric_transparency": fabric_transparency,
                         "length": length,
                         "width": width,
                     }

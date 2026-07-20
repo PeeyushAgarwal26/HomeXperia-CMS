@@ -11,15 +11,13 @@
 --        -h <host> -U <user> -d <db> > /tmp/seed.sql
 --    cat /tmp/schema.sql /tmp/seed.sql > homexperia_v1.sql
 --
---  Contains: full schema for all 24 tables (admin_users, states, modules,
+--  Contains: full schema for all 20 tables (admin_users, states, modules,
 --  admin_user_module_permissions, refresh_tokens, password_reset_tokens,
 --  activity_logs, parent_categories, child_categories, room_categories,
 --  suppliers, supplier_child_categories, supplier_module_permissions,
 --  customers, customer_suppliers, customer_login_events, filters,
---  filter_values, products, product_filter_values, product_upload_logs,
---  product_upload_log_items, notification_templates,
---  notification_template_suppliers) plus seed data for states (36) and
---  modules (25) — the read-only reference tables.
+--  filter_values, products, product_filter_values) plus seed data for
+--  states (36) and modules (25) — the read-only reference tables.
 --  Deliberately excludes admin_users data: the super admin is created
 --  per-environment via `./setup.sh setup` / `python -m
 --  scripts.create_superadmin`, never baked into a checked-in file, since
@@ -41,7 +39,7 @@
 -- PostgreSQL database dump
 --
 
-\restrict GtHS80ZH0jph9D8urLvNrC1b7zaHBjgs17e6Nal2D7EFcRFgLtffiVyiz6mjCZm
+\restrict AMv9ImwngGByeuRskZlwghvY019LmWLIM3svkv914p26esN0geut2cxeLiEaru8
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -359,9 +357,7 @@ CREATE TABLE public.products (
     id uuid NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    deleted_at timestamp with time zone,
-    shine_fabric smallint DEFAULT '0'::smallint NOT NULL,
-    fabric_transparency smallint DEFAULT '0'::smallint NOT NULL
+    deleted_at timestamp with time zone
 );
 
 
@@ -1198,13 +1194,13 @@ ALTER TABLE ONLY public.suppliers
 -- PostgreSQL database dump complete
 --
 
-\unrestrict GtHS80ZH0jph9D8urLvNrC1b7zaHBjgs17e6Nal2D7EFcRFgLtffiVyiz6mjCZm
+\unrestrict AMv9ImwngGByeuRskZlwghvY019LmWLIM3svkv914p26esN0geut2cxeLiEaru8
 
 --
 -- PostgreSQL database dump
 --
 
-\restrict 47czzcPKreAEavkc5D8HQCewf6x2poQb4U266HSK6uJd6wulQwxsBXbJeLSnaRC
+\restrict vfaMBHD7Yxatciw2RLIsI0Me8Z6weWembXAWvUC1oAUceBco5yRAjvtqmjj9UxQ
 
 -- Dumped from database version 17.10 (Homebrew)
 -- Dumped by pg_dump version 17.10 (Homebrew)
@@ -1298,5 +1294,5 @@ INSERT INTO public.states (code, name, sort_order) VALUES ('PY', 'Puducherry', 3
 -- PostgreSQL database dump complete
 --
 
-\unrestrict 47czzcPKreAEavkc5D8HQCewf6x2poQb4U266HSK6uJd6wulQwxsBXbJeLSnaRC
+\unrestrict vfaMBHD7Yxatciw2RLIsI0Me8Z6weWembXAWvUC1oAUceBco5yRAjvtqmjj9UxQ
 

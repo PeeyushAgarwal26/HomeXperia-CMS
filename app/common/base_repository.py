@@ -21,8 +21,10 @@ class BaseRepository(Generic[ModelType]):
             stmt = stmt.where(self.model.deleted_at.is_(None))
         return stmt
 
-    async def get_by_id(self, record_id: uuid.UUID) -> ModelType | None:
+    async def get_by_id(self, record_id: uuid.UUID, *, populate_existing: bool = False) -> ModelType | None:
         stmt = self._base_select().where(self.model.id == record_id)
+        if populate_existing:
+            stmt = stmt.execution_options(populate_existing=True)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 
@@ -74,7 +76,12 @@ class BaseRepository(Generic[ModelType]):
             .execution_options(synchronize_session=False)
         )
         await self.session.execute(stmt)
-        return await self.get_by_id(record_id)
+        # synchronize_session=False means a bulk UPDATE never touches an
+        # already-identity-mapped instance's in-memory attributes — without
+        # populate_existing, this refetch would silently hand back the
+        # pre-update object whenever the row was already loaded earlier in
+        # the same request (e.g. a permission check that fetched it first).
+        return await self.get_by_id(record_id, populate_existing=True)
 
     async def soft_delete(self, record_id: uuid.UUID) -> bool:
         if not hasattr(self.model, "deleted_at"):
