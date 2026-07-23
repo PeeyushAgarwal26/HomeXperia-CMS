@@ -23,8 +23,11 @@ class ProductUploadLog(Base):
         UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=False
     )
     supplier: Mapped[Supplier] = relationship(Supplier, lazy="joined")
-    uploaded_by: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=False
+    # Null means the supplier uploaded this themselves, with no admin in the loop —
+    # not an unknown/missing value. Non-null keeps meaning "an admin ran this on the
+    # supplier's behalf."
+    uploaded_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True
     )
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     total_rows: Mapped[int] = mapped_column(Integer, nullable=False, default=0)

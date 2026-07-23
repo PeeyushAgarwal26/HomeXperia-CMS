@@ -1,7 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.modules.geo.models import State
+from app.modules.geo.models import City, State
 
 
 class StateRepository:
@@ -17,3 +17,13 @@ class StateRepository:
         stmt = select(State.code).where(State.code == code)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none() is not None
+
+
+class CityRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def list_by_state(self, state_code: str) -> list[City]:
+        stmt = select(City).where(City.state_code == state_code).order_by(City.sort_order)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())

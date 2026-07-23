@@ -6,7 +6,7 @@ PRODUCT_UPLOAD_FIXED_COLUMNS = [
     "Bar Code",
     "Image",
     "Available Quantity",
-    "Rate",
+    "Rate per Piece",
     "Length",
     "Width",
 ]

@@ -12,6 +12,7 @@ from app.modules.products.schemas import (
     ApplicableFilterGroup,
     ProductCreateRequest,
     ProductFilterOption,
+    ProductFilterValueDetail,
     ProductUpdateRequest,
 )
 from app.modules.suppliers.repository import SupplierRepository
@@ -54,8 +55,35 @@ class ProductService:
             raise NotFoundException("Product")
         return item
 
+    async def get_own_product(self, product_id: uuid.UUID, supplier_id: uuid.UUID) -> Product:
+        """Same 404 either way (missing vs. belongs to someone else) — a
+        supplier probing another supplier's product id shouldn't be able to
+        tell the difference from a typo."""
+        item = await self.get_product(product_id)
+        if item.supplier_id != supplier_id:
+            raise NotFoundException("Product")
+        return item
+
     async def get_filter_value_ids(self, product_id: uuid.UUID) -> list[uuid.UUID]:
         return await self.product_filter_value_repository.get_filter_value_ids(product_id)
+
+    async def get_filter_value_details(
+        self, filter_value_ids: list[uuid.UUID]
+    ) -> list[ProductFilterValueDetail]:
+        """Names, not just ids — for the read-only Product Details view, which
+        shows "Color: Red" rather than a raw FilterValue id."""
+        if not filter_value_ids:
+            return []
+        values, _ = await self.filter_value_repository.get_all(
+            filters={"id": filter_value_ids}, limit=len(filter_value_ids)
+        )
+        details = [
+            ProductFilterValueDetail(
+                filter_id=v.filter_id, filter_name=v.filter.name, value_id=v.id, value=v.value
+            )
+            for v in values
+        ]
+        return sorted(details, key=lambda d: d.filter_name)
 
     async def get_applicable_filters(
         self, child_category_id: uuid.UUID, supplier_id: uuid.UUID

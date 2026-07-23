@@ -25,6 +25,7 @@ from app.modules.admin_users.models import AdminUser, AdminUserModulePermission
 from app.modules.admin_users.repository import AdminUserRepository
 from app.modules.auth.repository import PasswordResetTokenRepository, RefreshTokenRepository
 from app.modules.auth.schemas import AdminUserProfile, LoginResponse, TokenPair, UpdateMyProfileRequest
+from app.modules.logs.repository import AdminUserLoginEventRepository
 from app.modules.module_catalog.models import Module
 from app.services.email import send_email
 
@@ -47,6 +48,7 @@ class AuthService:
         self.admin_user_repo = AdminUserRepository(session)
         self.refresh_token_repo = RefreshTokenRepository(session)
         self.reset_token_repo = PasswordResetTokenRepository(session)
+        self.login_event_repo = AdminUserLoginEventRepository(session)
 
     async def _issue_token_pair(self, admin_user: AdminUser, ip_address: str | None, user_agent: str | None) -> TokenPair:
         access_token = create_access_token(
@@ -66,6 +68,7 @@ class AuthService:
         if not admin_user.is_active:
             raise UnauthorizedException("Account is deactivated.")
 
+        await self.login_event_repo.create(admin_user.id, ip_address, user_agent)
         tokens = await self._issue_token_pair(admin_user, ip_address, user_agent)
         return LoginResponse(
             access_token=tokens.access_token,

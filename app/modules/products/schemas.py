@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 from pydantic import BaseModel, Field
 
@@ -22,11 +23,20 @@ class ProductListItem(BaseModel):
     is_active: bool
 
 
+class ProductFilterValueDetail(BaseModel):
+    filter_id: uuid.UUID
+    filter_name: str
+    value_id: uuid.UUID
+    value: str
+
+
 class ProductDetail(BaseModel):
     id: uuid.UUID
     order_no: int
     child_category_id: uuid.UUID
+    child_category_name: str
     supplier_id: uuid.UUID
+    supplier_name: str
     catalog_name: str
     design_no: str | None
     bar_code: str
@@ -37,6 +47,9 @@ class ProductDetail(BaseModel):
     width: float
     is_active: bool
     filter_value_ids: list[uuid.UUID]
+    filter_values: list[ProductFilterValueDetail]
+    created_at: datetime
+    updated_at: datetime
 
 
 class ProductCreateRequest(BaseModel):
@@ -57,6 +70,38 @@ class ProductCreateRequest(BaseModel):
 class ProductUpdateRequest(BaseModel):
     child_category_id: uuid.UUID
     supplier_id: uuid.UUID
+    order_no: int = Field(ge=0)
+    catalog_name: str = Field(min_length=1, max_length=250)
+    design_no: str | None = None
+    bar_code: str = Field(min_length=1, max_length=100)
+    image_url: str | None = None
+    available_quantity: int | None = Field(default=None, ge=0)
+    rate: float | None = Field(default=None, ge=0)
+    length: float
+    width: float
+    filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+# Same shape as ProductCreateRequest/UpdateRequest minus supplier_id — a
+# supplier can only ever create/edit their own products, so supplier_id is
+# derived from the authenticated supplier server-side, never accepted from
+# the client. See products/supplier_controller.py.
+class SupplierProductCreateRequest(BaseModel):
+    child_category_id: uuid.UUID
+    order_no: int = Field(ge=0)
+    catalog_name: str = Field(min_length=1, max_length=250)
+    design_no: str | None = None
+    bar_code: str = Field(min_length=1, max_length=100)
+    image_url: str | None = None
+    available_quantity: int | None = Field(default=None, ge=0)
+    rate: float | None = Field(default=None, ge=0)
+    length: float
+    width: float
+    filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
+
+
+class SupplierProductUpdateRequest(BaseModel):
+    child_category_id: uuid.UUID
     order_no: int = Field(ge=0)
     catalog_name: str = Field(min_length=1, max_length=250)
     design_no: str | None = None

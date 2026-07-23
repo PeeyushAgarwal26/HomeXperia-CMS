@@ -62,3 +62,24 @@ class FilterValueUpdateRequest(BaseModel):
 
 class StatusUpdateRequest(BaseModel):
     is_active: bool
+
+
+class SupplierFilterOption(BaseModel):
+    id: uuid.UUID
+    name: str
+
+
+# Same shape as FilterValueCreateRequest/UpdateRequest minus supplier_id — a
+# supplier can only ever create/edit their own filter values, so supplier_id is
+# derived from the authenticated supplier server-side, never accepted from the
+# client. See filters/supplier_controller.py.
+class SupplierFilterValueCreateRequest(BaseModel):
+    filter_id: uuid.UUID
+    child_category_id: uuid.UUID
+    value: str = Field(min_length=1, max_length=250)
+
+
+class SupplierFilterValueUpdateRequest(BaseModel):
+    filter_id: uuid.UUID
+    child_category_id: uuid.UUID
+    value: str = Field(min_length=1, max_length=250)

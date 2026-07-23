@@ -7,10 +7,12 @@ import app.modules.auth.models  # noqa: F401
 import app.modules.activity_logs.models  # noqa: F401
 import app.modules.categories.models  # noqa: F401
 import app.modules.suppliers.models  # noqa: F401
+import app.modules.supplier_auth.models  # noqa: F401
 import app.modules.customers.models  # noqa: F401
 import app.modules.logs.models  # noqa: F401
 import app.modules.filters.models  # noqa: F401
 import app.modules.products.models  # noqa: F401
 import app.modules.product_uploads.models  # noqa: F401
 import app.modules.room_categories.models  # noqa: F401
+import app.modules.room_category_images.models  # noqa: F401
 import app.modules.notifications.models  # noqa: F401

@@ -1,6 +1,7 @@
 from fastapi import APIRouter
 
 from app.modules.auth.controller import router as auth_router
+from app.modules.supplier_auth.controller import router as supplier_auth_router
 from app.modules.admin_users.controller import router as admin_users_router
 from app.modules.module_catalog.controller import router as module_catalog_router
 from app.modules.geo.controller import router as geo_router
@@ -10,9 +11,13 @@ from app.modules.customers.controller import router as customers_router
 from app.modules.suppliers.controller import router as suppliers_router
 from app.modules.logs.controller import router as logs_router
 from app.modules.filters.controller import router as filters_router
+from app.modules.filters.supplier_controller import router as supplier_filter_values_router
 from app.modules.products.controller import router as products_router
+from app.modules.products.supplier_controller import router as supplier_products_router
 from app.modules.product_uploads.controller import router as product_uploads_router
+from app.modules.product_uploads.supplier_controller import router as supplier_product_uploads_router
 from app.modules.room_categories.controller import router as room_categories_router
+from app.modules.room_category_images.controller import router as room_category_images_router
 from app.modules.notifications.controller import router as notifications_router
 
 # Each module's controller.py defines its own `router = APIRouter(prefix=..., tags=[...])`.
@@ -20,6 +25,7 @@ from app.modules.notifications.controller import router as notifications_router
 
 api_v1_router = APIRouter(prefix="/api/v1")
 api_v1_router.include_router(auth_router)
+api_v1_router.include_router(supplier_auth_router)
 api_v1_router.include_router(admin_users_router)
 api_v1_router.include_router(module_catalog_router)
 api_v1_router.include_router(geo_router)
@@ -29,7 +35,11 @@ api_v1_router.include_router(customers_router)
 api_v1_router.include_router(suppliers_router)
 api_v1_router.include_router(logs_router)
 api_v1_router.include_router(filters_router)
+api_v1_router.include_router(supplier_filter_values_router)
 api_v1_router.include_router(products_router)
+api_v1_router.include_router(supplier_products_router)
 api_v1_router.include_router(product_uploads_router)
+api_v1_router.include_router(supplier_product_uploads_router)
 api_v1_router.include_router(room_categories_router)
+api_v1_router.include_router(room_category_images_router)
 api_v1_router.include_router(notifications_router)

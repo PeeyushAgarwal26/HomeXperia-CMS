@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 import app.db.models  # noqa: F401 — registers every table so cross-model FKs resolve
 from app.db.session import AsyncSessionFactory
-from app.modules.geo.models import State
+from app.modules.geo.models import City, State
 from app.modules.module_catalog.models import Module
 
 # code -> (name, sort_order). 28 states + 8 union territories of India.
@@ -28,6 +28,75 @@ STATES: list[tuple[str, str]] = [
     ("JK", "Jammu and Kashmir"), ("LA", "Ladakh"), ("LD", "Lakshadweep"),
     ("PY", "Puducherry"),
 ]
+
+# state_code -> city names. A suggestion list, not an exhaustive one — the City field
+# stays free text (see geo/models.py::City), so gaps here just mean typing instead of
+# picking. Order within each state is the dropdown's display order.
+CITIES: dict[str, list[str]] = {
+    "AP": ["Visakhapatnam", "Vijayawada", "Guntur", "Nellore", "Kurnool", "Kakinada",
+           "Rajahmundry", "Tirupati", "Kadapa", "Anantapur", "Eluru", "Ongole",
+           "Chittoor", "Srikakulam", "Vizianagaram"],
+    "AR": ["Itanagar", "Naharlagun", "Pasighat", "Tawang", "Ziro", "Bomdila"],
+    "AS": ["Guwahati", "Dibrugarh", "Silchar", "Jorhat", "Nagaon", "Tinsukia",
+           "Tezpur", "Karimganj", "Sivasagar", "Bongaigaon"],
+    "BR": ["Patna", "Gaya", "Bhagalpur", "Muzaffarpur", "Purnia", "Darbhanga",
+           "Bihar Sharif", "Arrah", "Begusarai", "Katihar", "Munger", "Chhapra"],
+    "CG": ["Raipur", "Bhilai", "Bilaspur", "Korba", "Durg", "Rajnandgaon",
+           "Jagdalpur", "Ambikapur"],
+    "GA": ["Panaji", "Margao", "Vasco da Gama", "Mapusa", "Ponda"],
+    "GJ": ["Ahmedabad", "Surat", "Vadodara", "Rajkot", "Bhavnagar", "Jamnagar",
+           "Gandhinagar", "Junagadh", "Anand", "Morbi", "Nadiad", "Mehsana",
+           "Bharuch", "Navsari", "Valsad"],
+    "HR": ["Gurugram", "Faridabad", "Panipat", "Ambala", "Karnal", "Hisar",
+           "Rohtak", "Yamunanagar", "Panchkula", "Sonipat", "Bhiwani", "Sirsa"],
+    "HP": ["Shimla", "Manali", "Dharamshala", "Solan", "Mandi", "Kullu", "Una",
+           "Bilaspur"],
+    "JH": ["Ranchi", "Jamshedpur", "Dhanbad", "Bokaro", "Deoghar", "Hazaribagh",
+           "Giridih"],
+    "KA": ["Bengaluru", "Mysuru", "Hubballi", "Mangaluru", "Belagavi", "Davangere",
+           "Bellary", "Tumkur", "Shivamogga", "Udupi", "Gulbarga", "Bidar", "Hospet"],
+    "KL": ["Thiruvananthapuram", "Kochi", "Kozhikode", "Kannur", "Thrissur",
+           "Kollam", "Alappuzha", "Palakkad", "Malappuram", "Kottayam"],
+    "MP": ["Bhopal", "Indore", "Jabalpur", "Gwalior", "Ujjain", "Sagar", "Ratlam",
+           "Satna", "Rewa", "Dewas", "Burhanpur"],
+    "MH": ["Mumbai", "Pune", "Nagpur", "Nashik", "Chhatrapati Sambhajinagar",
+           "Solapur", "Kolhapur", "Amravati", "Sangli", "Malegaon", "Akola",
+           "Bhiwandi", "Ichalkaranji", "Panvel", "Thane", "Navi Mumbai"],
+    "MN": ["Imphal", "Thoubal", "Bishnupur"],
+    "ML": ["Shillong", "Tura", "Jowai"],
+    "MZ": ["Aizawl", "Lunglei", "Champhai"],
+    "NL": ["Kohima", "Dimapur", "Mokokchung"],
+    "OD": ["Bhubaneswar", "Cuttack", "Rourkela", "Berhampur", "Sambalpur", "Puri",
+           "Balasore"],
+    "PB": ["Ludhiana", "Amritsar", "Jalandhar", "Patiala", "Bathinda", "Mohali",
+           "Hoshiarpur", "Pathankot", "Moga"],
+    "RJ": ["Jaipur", "Jodhpur", "Udaipur", "Kota", "Bikaner", "Ajmer", "Bhilwara",
+           "Alwar", "Bhiwadi", "Sikar", "Pali", "Sri Ganganagar", "Tonk",
+           "Chittorgarh", "Barmer"],
+    "SK": ["Gangtok", "Namchi", "Gyalshing"],
+    "TN": ["Chennai", "Coimbatore", "Madurai", "Tiruchirappalli", "Salem",
+           "Tirunelveli", "Tiruppur", "Erode", "Vellore", "Thoothukudi", "Karur",
+           "Namakkal", "Dindigul"],
+    "TG": ["Hyderabad", "Warangal", "Nizamabad", "Karimnagar", "Khammam",
+           "Secunderabad"],
+    "TR": ["Agartala", "Udaipur", "Dharmanagar"],
+    "UP": ["Lucknow", "Kanpur", "Ghaziabad", "Agra", "Varanasi", "Meerut",
+           "Prayagraj", "Bareilly", "Aligarh", "Moradabad", "Saharanpur",
+           "Gorakhpur", "Noida", "Firozabad", "Jhansi", "Muzaffarnagar", "Mathura",
+           "Bhadohi", "Mirzapur", "Rampur", "Shahjahanpur"],
+    "UK": ["Dehradun", "Haridwar", "Roorkee", "Haldwani", "Rudrapur", "Nainital",
+           "Rishikesh"],
+    "WB": ["Kolkata", "Howrah", "Durgapur", "Asansol", "Siliguri", "Malda",
+           "Bardhaman", "Kharagpur", "Haldia"],
+    "AN": ["Port Blair"],
+    "CH": ["Chandigarh"],
+    "DN": ["Silvassa", "Daman"],
+    "DL": ["New Delhi", "Delhi"],
+    "JK": ["Srinagar", "Jammu", "Anantnag", "Baramulla", "Sopore"],
+    "LA": ["Leh", "Kargil"],
+    "LD": ["Kavaratti"],
+    "PY": ["Puducherry", "Karaikal", "Yanam", "Mahe"],
+}
 
 # (key, name, parent_key, is_buildable) — order matters, parents before children.
 # Confirmed against the real live site's admin-menu HTML — see
@@ -55,6 +124,7 @@ MODULE_TREE: list[tuple[str, str, str | None, bool]] = [
     ("user_management.suppliers", "Suppliers", "user_management", True),
     ("logs", "Logs", None, False),
     ("logs.customer_login_history", "Customer Login History", "logs", False),
+    ("logs.login_history", "Login History", "logs", True),
     ("notification", "Notification", None, False),
     ("notification.template", "Template", "notification", False),
     ("app_feedback", "App Feedback", None, False),
@@ -73,6 +143,19 @@ async def seed_states(session) -> None:
     for sort_order, (code, name) in enumerate(STATES):
         session.add(State(code=code, name=name, sort_order=sort_order))
     print(f"Seeded {len(STATES)} states.")
+
+
+async def seed_cities(session) -> None:
+    existing = await session.scalar(select(City.id).limit(1))
+    if existing:
+        print("Cities already seeded — skipping.")
+        return
+    total = 0
+    for state_code, names in CITIES.items():
+        for sort_order, name in enumerate(names):
+            session.add(City(state_code=state_code, name=name, sort_order=sort_order))
+            total += 1
+    print(f"Seeded {total} cities.")
 
 
 async def seed_module_catalog(session) -> None:
@@ -99,6 +182,7 @@ async def seed_module_catalog(session) -> None:
 async def main() -> None:
     async with AsyncSessionFactory() as session:
         await seed_states(session)
+        await seed_cities(session)
         await seed_module_catalog(session)
         await session.commit()
 

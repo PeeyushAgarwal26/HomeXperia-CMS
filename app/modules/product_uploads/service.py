@@ -233,7 +233,7 @@ class ProductUploadService:
                     order_no = int(float(record.get("Order No") or 0))
                     available_quantity = record.get("Available Quantity") or None
                     available_quantity = int(float(available_quantity)) if available_quantity else None
-                    rate = record.get("Rate") or None
+                    rate = record.get("Rate per Piece") or None
                     rate = float(rate) if rate else None
                     length = float(record["Length"])
                     width = float(record["Width"])
@@ -306,7 +306,7 @@ class ProductUploadService:
         excel_bytes: bytes,
         excel_filename: str,
         images_zip_bytes: bytes | None,
-        uploaded_by: uuid.UUID,
+        uploaded_by: uuid.UUID | None,
     ) -> ProductUploadLog:
         # A hard failure here (corrupt file, a disk/DB error mid-write, anything unexpected)
         # still gets a Log entry — the point of this module is a complete run history, not
@@ -401,4 +401,14 @@ class ProductUploadService:
         if log is None:
             raise NotFoundException("Upload log")
         rows = await self.log_item_repository.list_for_log(log_id)
+        return log, rows
+
+    async def get_own_log_detail(
+        self, log_id: uuid.UUID, supplier_id: uuid.UUID
+    ) -> tuple[ProductUploadLog, list[ProductUploadLogItem]]:
+        """Same 404 either way (missing vs. belongs to another supplier) — mirrors
+        get_own_product/get_own_value; see products/service.py."""
+        log, rows = await self.get_log_detail(log_id)
+        if log.supplier_id != supplier_id:
+            raise NotFoundException("Upload log")
         return log, rows

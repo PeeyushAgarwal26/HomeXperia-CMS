@@ -11,6 +11,11 @@ class SupplierRepository(BaseRepository[Supplier]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Supplier, session)
 
+    async def get_by_username(self, username: str) -> Supplier | None:
+        stmt = self._base_select().where(Supplier.username == username)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def username_taken(self, username: str, exclude_id: uuid.UUID | None = None) -> bool:
         stmt = self._base_select().where(Supplier.username == username)
         if exclude_id is not None:

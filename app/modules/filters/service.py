@@ -41,6 +41,14 @@ class FilterService:
             raise NotFoundException("Filter")
         return item
 
+    async def list_active(self) -> list[Filter]:
+        """Every active Filter *type* (Color, Material, ...) a supplier can attach
+        their own values to — Filters themselves stay admin-only to create."""
+        items, _ = await self.repository.get_all(
+            filters={"is_active": True}, sort_by="name", sort_order="asc", limit=None
+        )
+        return items
+
     @staticmethod
     def _check_not_reserved(name: str) -> None:
         # The bulk product upload template reserves these headers for fixed product fields —
@@ -113,6 +121,14 @@ class FilterValueService:
     async def get_value(self, value_id: uuid.UUID) -> FilterValue:
         item = await self.repository.get_by_id(value_id)
         if item is None:
+            raise NotFoundException("Filter value")
+        return item
+
+    async def get_own_value(self, value_id: uuid.UUID, supplier_id: uuid.UUID) -> FilterValue:
+        """Same 404 either way (missing vs. belongs to someone else) — mirrors
+        Product's get_own_product; see products/service.py."""
+        item = await self.get_value(value_id)
+        if item.supplier_id != supplier_id:
             raise NotFoundException("Filter value")
         return item
 
