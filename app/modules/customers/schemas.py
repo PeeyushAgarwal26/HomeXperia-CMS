@@ -96,3 +96,34 @@ class MapSuppliersRequest(BaseModel):
 
 class MapSuppliersResponse(BaseModel):
     supplier_ids: list[uuid.UUID]
+
+
+class SupplierCustomerListItem(BaseModel):
+    id: uuid.UUID
+    sno: int
+    name: str
+    customer_code: str
+    city: str | None
+
+
+# primary_color is a placeholder field — the real field set for a customer's theme
+# is still pending discussion with the client. Null means no theme configured yet.
+class CustomerThemeDetail(BaseModel):
+    customer_id: uuid.UUID
+    primary_color: str | None
+
+
+class UpdateCustomerThemeRequest(BaseModel):
+    primary_color: str | None = Field(default=None, max_length=20)
+
+
+# Admin-facing view: one row per supplier this customer is mapped to, showing
+# whichever theme that specific supplier has configured for them (if any).
+class CustomerSupplierThemeItem(BaseModel):
+    supplier_id: uuid.UUID
+    supplier_name: str
+    primary_color: str | None
+
+
+class UpdateCustomerSupplierThemeRequest(BaseModel):
+    primary_color: str | None = Field(default=None, max_length=20)

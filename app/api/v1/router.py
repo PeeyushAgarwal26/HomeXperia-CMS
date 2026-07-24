@@ -8,6 +8,8 @@ from app.modules.geo.controller import router as geo_router
 from app.modules.files.controller import router as files_router
 from app.modules.categories.controller import router as categories_router
 from app.modules.customers.controller import router as customers_router
+from app.modules.customers.supplier_controller import router as supplier_customers_router
+from app.modules.customers.theme_controller import router as theme_configuration_router
 from app.modules.suppliers.controller import router as suppliers_router
 from app.modules.logs.controller import router as logs_router
 from app.modules.filters.controller import router as filters_router
@@ -32,6 +34,8 @@ api_v1_router.include_router(geo_router)
 api_v1_router.include_router(files_router)
 api_v1_router.include_router(categories_router)
 api_v1_router.include_router(customers_router)
+api_v1_router.include_router(supplier_customers_router)
+api_v1_router.include_router(theme_configuration_router)
 api_v1_router.include_router(suppliers_router)
 api_v1_router.include_router(logs_router)
 api_v1_router.include_router(filters_router)
