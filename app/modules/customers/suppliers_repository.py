@@ -34,6 +34,13 @@ class CustomerSupplierRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def is_mapped(self, supplier_id: uuid.UUID, customer_id: uuid.UUID) -> bool:
+        stmt = select(CustomerSupplier.customer_id).where(
+            CustomerSupplier.supplier_id == supplier_id, CustomerSupplier.customer_id == customer_id
+        )
+        result = await self.session.execute(stmt.limit(1))
+        return result.first() is not None
+
     async def get_supplier_names_map(self, customer_ids: list[uuid.UUID]) -> dict[uuid.UUID, list[str]]:
         if not customer_ids:
             return {}

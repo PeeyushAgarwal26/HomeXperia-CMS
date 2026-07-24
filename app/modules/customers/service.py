@@ -5,10 +5,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.pagination import PaginationParams, SortParams
 from app.core.security import hash_password
 from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
-from app.modules.customers.models import Customer
+from app.modules.customers.models import Customer, SupplierCustomerTheme
 from app.modules.customers.repository import CustomerRepository
 from app.modules.customers.schemas import CustomerCreateRequest, CustomerUpdateRequest
 from app.modules.customers.suppliers_repository import CustomerSupplierRepository
+from app.modules.customers.theme_repository import SupplierCustomerThemeRepository
 from app.modules.suppliers.repository import SupplierRepository
 
 
@@ -18,6 +19,7 @@ class CustomerService:
         self.repository = CustomerRepository(session)
         self.supplier_map_repository = CustomerSupplierRepository(session)
         self.supplier_repository = SupplierRepository(session)
+        self.theme_repository = SupplierCustomerThemeRepository(session)
 
     async def list_customers(
         self, pagination: PaginationParams, sort: SortParams, search: str | None, supplier_id: uuid.UUID | None
@@ -140,3 +142,54 @@ class CustomerService:
             raise BadRequestException(f"Unknown supplier id(s): {', '.join(str(i) for i in unknown_ids)}")
 
         await self.supplier_map_repository.replace(customer_id, unique_ids, mapped_by=mapped_by)
+
+    async def _ensure_own_customer(self, supplier_id: uuid.UUID, customer_id: uuid.UUID) -> None:
+        """Same 404 either way (missing vs. not mapped to this supplier) — mirrors
+        get_own_product/get_own_value; see products/service.py."""
+        if not await self.supplier_map_repository.is_mapped(supplier_id, customer_id):
+            raise NotFoundException("Customer")
+
+    async def get_own_customer_theme(
+        self, supplier_id: uuid.UUID, customer_id: uuid.UUID
+    ) -> SupplierCustomerTheme | None:
+        await self._ensure_own_customer(supplier_id, customer_id)
+        return await self.theme_repository.get(supplier_id, customer_id)
+
+    async def update_own_customer_theme(
+        self, supplier_id: uuid.UUID, customer_id: uuid.UUID, primary_color: str | None
+    ) -> SupplierCustomerTheme:
+        await self._ensure_own_customer(supplier_id, customer_id)
+        return await self.theme_repository.upsert(supplier_id, customer_id, primary_color)
+
+    async def list_customer_supplier_themes(
+        self, customer_id: uuid.UUID
+    ) -> list[tuple[uuid.UUID, str, str | None]]:
+        """Admin-facing view — every supplier this customer is mapped to, with
+        whichever theme that supplier has configured for them (None if not set yet)."""
+        await self.get_customer(customer_id)
+        supplier_ids = await self.supplier_map_repository.get_supplier_ids(customer_id)
+        if not supplier_ids:
+            return []
+        suppliers, _ = await self.supplier_repository.get_all(
+            filters={"id": supplier_ids}, limit=len(supplier_ids)
+        )
+        color_by_supplier = {
+            t.supplier_id: t.primary_color for t in await self.theme_repository.list_for_customer(customer_id)
+        }
+        return [(s.id, s.name, color_by_supplier.get(s.id)) for s in suppliers]
+
+    async def set_customer_supplier_theme(
+        self, customer_id: uuid.UUID, supplier_id: uuid.UUID, primary_color: str | None
+    ) -> str:
+        """Admin override — unlike the supplier's own self-service endpoint, this
+        skips the ownership check (admin can act on behalf of any supplier) but
+        still confirms the two are actually mapped, since a theme for an unrelated
+        supplier makes no sense. Returns the supplier's name for the response."""
+        await self.get_customer(customer_id)
+        if not await self.supplier_map_repository.is_mapped(supplier_id, customer_id):
+            raise BadRequestException("This supplier is not mapped to this customer.")
+        supplier = await self.supplier_repository.get_by_id(supplier_id)
+        if supplier is None:
+            raise NotFoundException("Supplier")
+        await self.theme_repository.upsert(supplier_id, customer_id, primary_color)
+        return supplier.name

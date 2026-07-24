@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, SmallInteger, String
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Index, SmallInteger, String, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -65,3 +65,25 @@ class CustomerSupplier(Base):
     mapped_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+class SupplierCustomerTheme(BaseModel):
+    """Supplier -> My Customers -> Theme. Branding a supplier has configured for one
+    specific customer's future storefront — scoped per (supplier, customer) pair,
+    since the same customer may see different branding from each supplier they work
+    with. primary_color is a placeholder field; the real field set is still pending
+    discussion with the client — this table is built to grow more columns later."""
+
+    __tablename__ = "supplier_customer_themes"
+    __table_args__ = (
+        UniqueConstraint("supplier_id", "customer_id", name="uq_supplier_customer_themes_pair"),
+        Index("ix_supplier_customer_themes_customer_id", "customer_id"),
+    )
+
+    supplier_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("suppliers.id", ondelete="CASCADE"), nullable=False
+    )
+    customer_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
+    )
+    primary_color: Mapped[str | None] = mapped_column(String(20), nullable=True)

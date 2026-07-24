@@ -127,6 +127,7 @@ MODULE_TREE: list[tuple[str, str, str | None, bool]] = [
     ("logs.login_history", "Login History", "logs", True),
     ("notification", "Notification", None, False),
     ("notification.template", "Template", "notification", False),
+    ("theme_configuration", "Theme Configuration", None, False),
     ("app_feedback", "App Feedback", None, False),
     ("setting", "Setting", None, False),
     ("setting.change_password", "Change Password", "setting", True),
