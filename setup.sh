@@ -268,6 +268,7 @@ SMTP_PASSWORD=
 SMTP_FROM_NAME=HomeXperia Admin
 
 UPLOADS_DIR=uploads
+UPLOADS_URL_PREFIX=uploads
 LOG_DIR=logs
 EOF
 

@@ -21,6 +21,12 @@ class Supplier(BaseModel, SoftDeleteMixin):
         ),
         Index("ix_suppliers_is_active", "is_active"),
         Index("ix_suppliers_state_code", "state_code"),
+        Index(
+            "ix_suppliers_linked_customer_id",
+            "linked_customer_id",
+            unique=True,
+            postgresql_where="deleted_at IS NULL",
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(250), nullable=False)
@@ -40,6 +46,14 @@ class Supplier(BaseModel, SoftDeleteMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True
+    )
+    # This supplier's OWN customer identity (opt-in — see CustomerService/
+    # SupplierService's create_linked_customer / promote_to_supplier) — a
+    # fully independent account with its own password, linked only so the
+    # AI Credits engine and product-catalog scoping can resolve "this real
+    # business" consistently regardless of which portal they're using.
+    linked_customer_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("customers.id"), nullable=True
     )
 
 

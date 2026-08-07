@@ -15,11 +15,14 @@ from app.modules.admin_users.models import AdminUser
 from app.modules.customers.models import Customer
 from app.modules.customers.schemas import (
     CustomerCreateRequest,
+    CustomerCreateResponse,
     CustomerDetail,
     CustomerListItem,
     CustomerUpdateRequest,
+    LinkedAccountCreatedResponse,
     MapSuppliersRequest,
     MapSuppliersResponse,
+    PromoteToSupplierRequest,
     StatusUpdateRequest,
 )
 from app.modules.customers.service import CustomerService
@@ -46,6 +49,7 @@ def _to_detail(customer: Customer) -> CustomerDetail:
         device_limit=customer.device_limit,
         customer_code=customer.customer_code,
         is_active=customer.is_active,
+        linked_supplier_id=customer.linked_supplier_id,
     )
 
 
@@ -143,14 +147,19 @@ async def get_customer(
     return controller.success(data=_to_detail(customer))
 
 
-@router.post("", response_model=APIResponse[CustomerDetail], status_code=201)
+@router.post("", response_model=APIResponse[CustomerCreateResponse], status_code=201)
 async def create_customer(
     body: CustomerCreateRequest,
     current_admin: AdminUser = Depends(_require_customer_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    customer = await CustomerService(session).create(body, created_by=current_admin.id)
-    return controller.success(data=_to_detail(customer), message="Customer created successfully.")
+    customer, temp_password, linked_supplier = await CustomerService(session).create(
+        body, created_by=current_admin.id
+    )
+    data = CustomerCreateResponse(
+        **_to_detail(customer).model_dump(), temporary_password=temp_password, linked_supplier=linked_supplier
+    )
+    return controller.success(data=data, message="Customer created successfully.")
 
 
 @router.put("/{customer_id}", response_model=APIResponse[CustomerDetail])
@@ -172,6 +181,23 @@ async def delete_customer(
 ) -> APIResponse:
     await CustomerService(session).delete(customer_id)
     return controller.success(message="Customer deleted.")
+
+
+@router.post(
+    "/{customer_id}/promote-to-supplier",
+    response_model=APIResponse[LinkedAccountCreatedResponse],
+    status_code=201,
+)
+async def promote_customer_to_supplier(
+    customer_id: uuid.UUID,
+    body: PromoteToSupplierRequest,
+    current_admin: AdminUser = Depends(_require_customer_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    data = await CustomerService(session).promote_to_supplier(
+        customer_id, body.username, body.state_code, body.city, created_by=current_admin.id
+    )
+    return controller.success(data=data, message="Supplier account created and credentials emailed.")
 
 
 @router.patch("/{customer_id}/status", response_model=APIResponse[dict])

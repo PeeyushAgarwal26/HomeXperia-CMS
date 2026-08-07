@@ -38,6 +38,15 @@ class CategoryService:
             for parent in parents
         ]
 
+    async def get_customer_parents(self) -> list[ParentCategory]:
+        return await self.repository.list_parents()
+
+    async def get_customer_children(self, category_code: str) -> list[ChildCategory]:
+        parent = await self.repository.get_parent_by_name(category_code)
+        if parent is None:
+            return []
+        return await self.repository.list_children_for_parent(parent.id)
+
 
 class ParentCategoryService:
     """Full Add/Edit/Delete + Activate/Deactivate — deliberately more open than

@@ -10,6 +10,11 @@ class CustomerRepository(BaseRepository[Customer]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Customer, session)
 
+    async def get_by_customer_code(self, customer_code: str) -> Customer | None:
+        stmt = self._base_select().where(Customer.customer_code == customer_code)
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def customer_code_taken(self, customer_code: str, exclude_id: uuid.UUID | None = None) -> bool:
         stmt = self._base_select().where(Customer.customer_code == customer_code)
         if exclude_id is not None:

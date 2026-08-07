@@ -29,6 +29,18 @@ class CustomerSupplierRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_suppliers(self, customer_id: uuid.UUID) -> list[Supplier]:
+        """Full supplier rows (not just ids) for every supplier this customer
+        is mapped to — e.g. to read each one's logo_url for branding."""
+        stmt = (
+            select(Supplier)
+            .join(CustomerSupplier, CustomerSupplier.supplier_id == Supplier.id)
+            .where(CustomerSupplier.customer_id == customer_id)
+            .order_by(Supplier.name)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_customer_ids(self, supplier_id: uuid.UUID) -> list[uuid.UUID]:
         stmt = select(CustomerSupplier.customer_id).where(CustomerSupplier.supplier_id == supplier_id)
         result = await self.session.execute(stmt)

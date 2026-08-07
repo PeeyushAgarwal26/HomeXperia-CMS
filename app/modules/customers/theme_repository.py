@@ -24,15 +24,23 @@ class SupplierCustomerThemeRepository:
         return result.scalar_one_or_none()
 
     async def upsert(
-        self, supplier_id: uuid.UUID, customer_id: uuid.UUID, primary_color: str | None
+        self,
+        supplier_id: uuid.UUID,
+        customer_id: uuid.UUID,
+        primary_color: str | None,
+        secondary_color: str | None,
     ) -> SupplierCustomerTheme:
         existing = await self.get(supplier_id, customer_id)
         if existing is not None:
             existing.primary_color = primary_color
+            existing.secondary_color = secondary_color
             await self.session.flush()
             return existing
         theme = SupplierCustomerTheme(
-            supplier_id=supplier_id, customer_id=customer_id, primary_color=primary_color
+            supplier_id=supplier_id,
+            customer_id=customer_id,
+            primary_color=primary_color,
+            secondary_color=secondary_color,
         )
         self.session.add(theme)
         await self.session.flush()

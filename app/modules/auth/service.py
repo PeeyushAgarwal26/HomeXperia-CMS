@@ -90,15 +90,16 @@ class AuthService:
         await self.reset_token_repo.create(admin_user.id, hash_token(raw_token), expires_at, requested_ip)
 
         reset_link = f"{settings.frontend_url}/reset-password?token={raw_token}"
-        try:
-            await send_email(
-                to=admin_user.email,
-                subject="Reset your HomeXperia Admin password",
-                body_html=f'<p>Click <a href="{reset_link}">here</a> to reset your password. '
-                f"This link expires in {settings.password_reset_token_expire_minutes} minutes.</p>",
-            )
-        except Exception:
-            logger.exception("password_reset_email_failed", admin_user_id=str(admin_user.id))
+        if admin_user.email:
+            try:
+                await send_email(
+                    to=admin_user.email,
+                    subject="Reset your HomeXperia Admin password",
+                    body_html=f'<p>Click <a href="{reset_link}">here</a> to reset your password. '
+                    f"This link expires in {settings.password_reset_token_expire_minutes} minutes.</p>",
+                )
+            except Exception:
+                logger.exception("password_reset_email_failed", admin_user_id=str(admin_user.id))
 
     async def reset_password(self, token: str, new_password: str) -> None:
         payload = decode_token(token)
@@ -162,7 +163,7 @@ class AuthService:
         await self.refresh_token_repo.revoke_all_for_admin_user(admin_user.id)
 
     async def update_my_profile(self, admin_user: AdminUser, data: UpdateMyProfileRequest) -> AdminUser:
-        if await self.admin_user_repo.email_taken(data.email, exclude_id=admin_user.id):
+        if data.email and await self.admin_user_repo.email_taken(data.email, exclude_id=admin_user.id):
             raise ConflictException("This email is already in use.")
         if await self.admin_user_repo.phone_number_taken(data.phone_number, exclude_id=admin_user.id):
             raise ConflictException("This phone number is already in use.")

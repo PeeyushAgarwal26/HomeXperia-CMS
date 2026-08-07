@@ -71,3 +71,28 @@ class ChildCategoryUpdateRequest(BaseModel):
 
 class StatusUpdateRequest(BaseModel):
     is_active: bool
+
+
+class ParentCategoryCustomerItem(BaseModel):
+    """category_code is derived (upper-cased name), not a stored column —
+    the client app's AR hotspot types (wall/floor/window/...) are matched
+    against it case-insensitively. See CategoryRepository.get_parent_by_name."""
+
+    id: uuid.UUID
+    name: str
+    category_code: str
+    icon_url: str | None
+
+
+class ChildCategoryCustomerItem(BaseModel):
+    """unique_code is derived (lower-cased, underscored name), not a stored
+    column — the client app switches compositing behavior (e.g. repeat
+    count) on specific slugs like "wallpaper"/"wall_art". Only matches for
+    child categories whose name happens to equal one of those slugs; no
+    such mapping is stored or guaranteed today."""
+
+    id: uuid.UUID
+    name: str
+    unique_code: str
+    icon_url: str | None
+    parent_category_id: uuid.UUID

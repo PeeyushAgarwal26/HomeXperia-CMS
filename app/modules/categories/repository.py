@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.base_repository import BaseRepository
@@ -63,6 +63,31 @@ class CategoryRepository:
         )
         result = await self.session.execute(stmt)
         return set(result.scalars().all())
+
+    async def get_parent_by_name(self, name: str) -> ParentCategory | None:
+        """Case-insensitive — the client app's AR hotspot types ("wall", "floor",
+        ...) are lowercase strings, while these rows are stored as typed in
+        admin ("WALL", "Wall", etc.), so an exact match isn't reliable."""
+        stmt = select(ParentCategory).where(
+            ParentCategory.is_active.is_(True),
+            ParentCategory.deleted_at.is_(None),
+            func.lower(ParentCategory.name) == name.strip().lower(),
+        )
+        result = await self.session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def list_children_for_parent(self, parent_id: uuid.UUID) -> list[ChildCategory]:
+        stmt = (
+            select(ChildCategory)
+            .where(
+                ChildCategory.parent_category_id == parent_id,
+                ChildCategory.is_active.is_(True),
+                ChildCategory.deleted_at.is_(None),
+            )
+            .order_by(ChildCategory.sort_order)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def get_names_for_ids(self, child_category_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
         if not child_category_ids:

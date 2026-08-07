@@ -1,16 +1,24 @@
+import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginationParams, SortParams
-from app.core.security import hash_password
+from app.core.security import generate_temp_password, hash_password
 from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
 from app.modules.customers.models import Customer, SupplierCustomerTheme
 from app.modules.customers.repository import CustomerRepository
-from app.modules.customers.schemas import CustomerCreateRequest, CustomerUpdateRequest
+from app.modules.customers.schemas import (
+    CustomerCreateRequest,
+    CustomerUpdateRequest,
+    LinkedAccountCreatedResponse,
+)
 from app.modules.customers.suppliers_repository import CustomerSupplierRepository
 from app.modules.customers.theme_repository import SupplierCustomerThemeRepository
 from app.modules.suppliers.repository import SupplierRepository
+from app.services.email import send_email
+
+logger = logging.getLogger(__name__)
 
 
 class CustomerService:
@@ -96,15 +104,109 @@ class CustomerService:
         if email and await self.repository.email_taken(email, exclude_id):
             raise ConflictException("This email is already in use.")
 
-    async def create(self, data: CustomerCreateRequest, created_by: uuid.UUID) -> Customer:
+    async def create(
+        self, data: CustomerCreateRequest, created_by: uuid.UUID
+    ) -> tuple[Customer, str, LinkedAccountCreatedResponse | None]:
         await self._check_uniqueness(data.customer_code, data.phone_number, data.email)
+        if data.also_create_supplier and await self.supplier_repository.username_taken(data.supplier_username):
+            raise ConflictException("This username is already in use.")
 
-        payload = data.model_dump(exclude={"password", "confirm_password"})
-        payload["password_hash"] = hash_password(data.password)
+        temp_password = generate_temp_password()
+        payload = data.model_dump(exclude={"also_create_supplier", "supplier_username"})
+        payload["password_hash"] = hash_password(temp_password)
         payload["created_by"] = created_by
 
         customer = await self.repository.create(payload)
-        return await self.get_customer(customer.id)
+
+        if customer.email:
+            try:
+                await send_email(
+                    to=customer.email,
+                    subject="Your HomeXperia Client Portal account",
+                    body_html=(
+                        f"<p>A Client Portal account has been created for you.</p>"
+                        f"<p>Customer Code: <strong>{customer.customer_code}</strong><br>"
+                        f"Temporary Password: <strong>{temp_password}</strong></p>"
+                        f"<p>Please log in and change your password.</p>"
+                    ),
+                )
+            except Exception:
+                logger.exception("customer_credentials_email_failed", extra={"customer_id": str(customer.id)})
+
+        linked_supplier = (
+            await self.promote_to_supplier(
+                customer.id, data.supplier_username, state_code=None, city=None, created_by=created_by
+            )
+            if data.also_create_supplier
+            else None
+        )
+        return await self.get_customer(customer.id), temp_password, linked_supplier
+
+    async def promote_to_supplier(
+        self,
+        customer_id: uuid.UUID,
+        username: str,
+        state_code: str | None,
+        city: str | None,
+        created_by: uuid.UUID,
+    ) -> LinkedAccountCreatedResponse:
+        """Auto-provisions this customer's own Supplier identity — a fully
+        independent account (own username, own random temp password)
+        carrying over the customer's shared fields. state_code/city are only
+        taken from the arguments when the customer record doesn't already
+        have them set — Supplier requires both, Customer allows either to be
+        null."""
+        customer = await self.get_customer(customer_id)
+        if customer.linked_supplier_id is not None:
+            raise ConflictException("This customer already has a linked supplier account.")
+        if await self.supplier_repository.username_taken(username):
+            raise BadRequestException("This username is already in use.")
+
+        resolved_state_code = customer.state_code or state_code
+        resolved_city = customer.city or city
+        if not resolved_state_code or not resolved_city:
+            raise BadRequestException("State and city are required to create a supplier account.")
+
+        temp_password = generate_temp_password()
+        supplier = await self.supplier_repository.create(
+            {
+                "name": customer.name,
+                "email": customer.email,
+                "phone_number": customer.phone_number,
+                "gst_number": customer.gst_number,
+                "address": customer.address,
+                "pin_code": customer.pin_code,
+                "state_code": resolved_state_code,
+                "city": resolved_city,
+                "username": username,
+                "password_hash": hash_password(temp_password),
+                "created_by": created_by,
+                "linked_customer_id": customer.id,
+            }
+        )
+        await self.repository.update(customer_id, {"linked_supplier_id": supplier.id})
+
+        if customer.email:
+            try:
+                await send_email(
+                    to=customer.email,
+                    subject="Your HomeXperia Supplier Portal account",
+                    body_html=(
+                        f"<p>A Supplier Portal account has been created for you.</p>"
+                        f"<p>Username: <strong>{username}</strong><br>"
+                        f"Temporary Password: <strong>{temp_password}</strong></p>"
+                        f"<p>Please log in and change your password.</p>"
+                    ),
+                )
+            except Exception:
+                logger.exception("linked_supplier_credentials_email_failed", extra={"customer_id": str(customer_id)})
+
+        return LinkedAccountCreatedResponse(
+            linked_id=supplier.id,
+            login_identifier=username,
+            email_sent_to=customer.email,
+            temporary_password=temp_password,
+        )
 
     async def update(self, customer_id: uuid.UUID, data: CustomerUpdateRequest) -> Customer:
         await self.get_customer(customer_id)
@@ -118,7 +220,9 @@ class CustomerService:
         return await self.get_customer(customer_id)
 
     async def delete(self, customer_id: uuid.UUID) -> None:
-        await self.get_customer(customer_id)
+        customer = await self.get_customer(customer_id)
+        if customer.linked_supplier_id is not None:
+            await self.supplier_repository.soft_delete(customer.linked_supplier_id)
         await self.repository.soft_delete(customer_id)
 
     async def set_status(self, customer_id: uuid.UUID, is_active: bool) -> Customer:
@@ -156,14 +260,18 @@ class CustomerService:
         return await self.theme_repository.get(supplier_id, customer_id)
 
     async def update_own_customer_theme(
-        self, supplier_id: uuid.UUID, customer_id: uuid.UUID, primary_color: str | None
+        self,
+        supplier_id: uuid.UUID,
+        customer_id: uuid.UUID,
+        primary_color: str | None,
+        secondary_color: str | None,
     ) -> SupplierCustomerTheme:
         await self._ensure_own_customer(supplier_id, customer_id)
-        return await self.theme_repository.upsert(supplier_id, customer_id, primary_color)
+        return await self.theme_repository.upsert(supplier_id, customer_id, primary_color, secondary_color)
 
     async def list_customer_supplier_themes(
         self, customer_id: uuid.UUID
-    ) -> list[tuple[uuid.UUID, str, str | None]]:
+    ) -> list[tuple[uuid.UUID, str, str | None, str | None]]:
         """Admin-facing view — every supplier this customer is mapped to, with
         whichever theme that supplier has configured for them (None if not set yet)."""
         await self.get_customer(customer_id)
@@ -173,13 +281,25 @@ class CustomerService:
         suppliers, _ = await self.supplier_repository.get_all(
             filters={"id": supplier_ids}, limit=len(supplier_ids)
         )
-        color_by_supplier = {
-            t.supplier_id: t.primary_color for t in await self.theme_repository.list_for_customer(customer_id)
+        theme_by_supplier = {
+            t.supplier_id: t for t in await self.theme_repository.list_for_customer(customer_id)
         }
-        return [(s.id, s.name, color_by_supplier.get(s.id)) for s in suppliers]
+        return [
+            (
+                s.id,
+                s.name,
+                theme_by_supplier[s.id].primary_color if s.id in theme_by_supplier else None,
+                theme_by_supplier[s.id].secondary_color if s.id in theme_by_supplier else None,
+            )
+            for s in suppliers
+        ]
 
     async def set_customer_supplier_theme(
-        self, customer_id: uuid.UUID, supplier_id: uuid.UUID, primary_color: str | None
+        self,
+        customer_id: uuid.UUID,
+        supplier_id: uuid.UUID,
+        primary_color: str | None,
+        secondary_color: str | None,
     ) -> str:
         """Admin override — unlike the supplier's own self-service endpoint, this
         skips the ownership check (admin can act on behalf of any supplier) but
@@ -191,5 +311,5 @@ class CustomerService:
         supplier = await self.supplier_repository.get_by_id(supplier_id)
         if supplier is None:
             raise NotFoundException("Supplier")
-        await self.theme_repository.upsert(supplier_id, customer_id, primary_color)
+        await self.theme_repository.upsert(supplier_id, customer_id, primary_color, secondary_color)
         return supplier.name

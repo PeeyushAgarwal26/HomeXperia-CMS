@@ -127,3 +127,23 @@ class ApplicableFilterGroup(BaseModel):
     filter_id: uuid.UUID
     filter_name: str
     options: list[ProductFilterOption]
+
+
+class ProductCustomerItem(BaseModel):
+    """Only fields that actually exist on Product — brand/size/weight/
+    composition/end_use/wash_care/serial_no/shade_no/price_unit/uom aren't
+    modeled anywhere in this backend yet (not on Product, not in the
+    bulk-upload template) and are deliberately omitted rather than sent as
+    fabricated nulls. product_name mirrors catalog_name under the
+    alternate key name some UI components read."""
+
+    product_id: uuid.UUID
+    product_name: str
+    catalog_name: str
+    design_no: str | None
+    product_image: str | None
+    thumbnail: str | None
+    rate: float | None
+    width: float
+    length: float
+    child_category_id: uuid.UUID
