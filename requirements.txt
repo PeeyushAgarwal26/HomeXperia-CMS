@@ -12,3 +12,16 @@ python-dotenv>=1.0.0
 structlog>=24.4.0
 aiosmtplib>=2.0.0
 openpyxl>=3.1.0
+
+# Room visualizer (ported from the client's Flask backend)
+httpx>=0.28.0
+opencv-python-headless>=4.10.0
+numpy>=2.0.0
+pillow>=11.0.0
+scipy>=1.14.0
+openai>=1.50.0
+fpdf2>=2.7.0
+qrcode>=8.0
+
+# AI Credits monthly rollover cron (in-process scheduler)
+apscheduler>=3.10.0

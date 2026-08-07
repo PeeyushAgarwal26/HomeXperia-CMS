@@ -5,12 +5,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.common.pagination import PaginationParams, SortParams
 from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
 from app.modules.categories.repository import ChildCategoryRepository
+from app.modules.customers.models import Customer
+from app.modules.customers.suppliers_repository import CustomerSupplierRepository
 from app.modules.filters.repository import FilterValueRepository
 from app.modules.products.models import Product
 from app.modules.products.repository import ProductFilterValueRepository, ProductRepository
 from app.modules.products.schemas import (
     ApplicableFilterGroup,
     ProductCreateRequest,
+    ProductCustomerItem,
     ProductFilterOption,
     ProductFilterValueDetail,
     ProductUpdateRequest,
@@ -25,6 +28,20 @@ class ProductService:
         self.supplier_repository = SupplierRepository(session)
         self.filter_value_repository = FilterValueRepository(session)
         self.product_filter_value_repository = ProductFilterValueRepository(session)
+        self.customer_supplier_repository = CustomerSupplierRepository(session)
+
+    async def _resolve_visible_supplier_ids(self, customer: Customer | None) -> list[uuid.UUID] | None:
+        """None = unscoped (anonymous/Shopify-embed caller — no customer
+        identity to scope by, unchanged from today). A real customer sees
+        only the suppliers they're mapped to (Map Suppliers) plus their own,
+        if they're themselves a linked supplier identity — an empty list here
+        correctly yields zero products, not everything."""
+        if customer is None:
+            return None
+        supplier_ids = list(await self.customer_supplier_repository.get_supplier_ids(customer.id))
+        if customer.linked_supplier_id is not None:
+            supplier_ids.append(customer.linked_supplier_id)
+        return supplier_ids
 
     async def list_products(
         self,
@@ -89,6 +106,19 @@ class ProductService:
         self, child_category_id: uuid.UUID, supplier_id: uuid.UUID
     ) -> list[ApplicableFilterGroup]:
         values = await self.filter_value_repository.list_applicable(child_category_id, supplier_id)
+        return self._group_filter_values(values)
+
+    async def get_customer_applicable_filters(
+        self, child_category_id: uuid.UUID, customer: Customer | None
+    ) -> list[ApplicableFilterGroup]:
+        visible_supplier_ids = await self._resolve_visible_supplier_ids(customer)
+        values = await self.filter_value_repository.list_applicable_for_category(
+            child_category_id, visible_supplier_ids
+        )
+        return self._group_filter_values(values)
+
+    @staticmethod
+    def _group_filter_values(values: list) -> list[ApplicableFilterGroup]:
         groups: dict[uuid.UUID, ApplicableFilterGroup] = {}
         for value in values:
             group = groups.setdefault(
@@ -97,6 +127,38 @@ class ProductService:
             )
             group.options.append(ProductFilterOption(id=value.id, value=value.value))
         return sorted(groups.values(), key=lambda g: g.filter_name)
+
+    async def list_customer_products(
+        self,
+        child_category_id: uuid.UUID | None,
+        search: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        filter_value_ids: list[uuid.UUID],
+        offset: int,
+        limit: int | None,
+        customer: Customer | None,
+    ) -> tuple[list[ProductCustomerItem], int]:
+        visible_supplier_ids = await self._resolve_visible_supplier_ids(customer)
+        items, total = await self.repository.list_for_customer(
+            child_category_id, search, min_price, max_price, filter_value_ids, offset, limit, visible_supplier_ids
+        )
+        data = [
+            ProductCustomerItem(
+                product_id=item.id,
+                product_name=item.catalog_name,
+                catalog_name=item.catalog_name,
+                design_no=item.design_no,
+                product_image=item.image_url,
+                thumbnail=item.image_url,
+                rate=item.rate,
+                width=item.width,
+                length=item.length,
+                child_category_id=item.child_category_id,
+            )
+            for item in items
+        ]
+        return data, total
 
     async def list_for_export(
         self,

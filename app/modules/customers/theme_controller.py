@@ -70,8 +70,10 @@ async def get_customer_supplier_themes(
 ) -> APIResponse:
     items = await CustomerService(session).list_customer_supplier_themes(customer_id)
     data = [
-        CustomerSupplierThemeItem(supplier_id=sid, supplier_name=sname, primary_color=color)
-        for sid, sname, color in items
+        CustomerSupplierThemeItem(
+            supplier_id=sid, supplier_name=sname, primary_color=primary, secondary_color=secondary
+        )
+        for sid, sname, primary, secondary in items
     ]
     return controller.success(data=data)
 
@@ -88,11 +90,14 @@ async def update_customer_supplier_theme(
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
     supplier_name = await CustomerService(session).set_customer_supplier_theme(
-        customer_id, supplier_id, body.primary_color
+        customer_id, supplier_id, body.primary_color, body.secondary_color
     )
     return controller.success(
         data=CustomerSupplierThemeItem(
-            supplier_id=supplier_id, supplier_name=supplier_name, primary_color=body.primary_color
+            supplier_id=supplier_id,
+            supplier_name=supplier_name,
+            primary_color=body.primary_color,
+            secondary_color=body.secondary_color,
         ),
         message="Theme updated successfully.",
     )

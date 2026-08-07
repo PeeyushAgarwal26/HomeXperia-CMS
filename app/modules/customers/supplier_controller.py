@@ -30,7 +30,9 @@ def _to_list_item(item: Customer, sno: int) -> SupplierCustomerListItem:
 
 def _to_theme_detail(customer_id: uuid.UUID, theme: SupplierCustomerTheme | None) -> CustomerThemeDetail:
     return CustomerThemeDetail(
-        customer_id=customer_id, primary_color=theme.primary_color if theme else None
+        customer_id=customer_id,
+        primary_color=theme.primary_color if theme else None,
+        secondary_color=theme.secondary_color if theme else None,
     )
 
 
@@ -67,6 +69,6 @@ async def update_my_customer_theme(
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
     theme = await CustomerService(session).update_own_customer_theme(
-        supplier.id, customer_id, body.primary_color
+        supplier.id, customer_id, body.primary_color, body.secondary_color
     )
     return controller.success(data=_to_theme_detail(customer_id, theme), message="Theme updated successfully.")

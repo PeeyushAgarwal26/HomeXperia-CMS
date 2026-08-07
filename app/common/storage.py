@@ -7,6 +7,25 @@ from fastapi import UploadFile
 from app.core.config import settings
 
 
+def resolve_uploaded_file_path(url: str) -> Path | None:
+    """Maps a URL previously returned by LocalDiskStorage.save()/save_bytes()
+    back to its actual location on disk. Root-relative URLs are resolved via
+    settings.uploads_dir — deliberately NOT via `Path(url.lstrip("/"))`,
+    which only happens to work when uploads_dir is the literal relative
+    string "uploads" and the process cwd is the repo root. In production,
+    uploads_dir is an absolute path outside the app directory (see
+    app/core/config.py), decoupled from the URL's fixed "/uploads/..."
+    prefix, so every caller that reads an already-uploaded file back off
+    disk must go through this instead of re-deriving the path itself.
+    Returns None for anything that isn't one of our own upload URLs
+    (a different prefix, an absolute http(s) URL, etc).
+    """
+    prefix = f"/{settings.uploads_url_prefix}/"
+    if not url.startswith(prefix):
+        return None
+    return Path(settings.uploads_dir) / url[len(prefix) :]
+
+
 class StorageInterface(ABC):
     @abstractmethod
     async def save(self, file: UploadFile, subfolder: str) -> str:
@@ -35,12 +54,11 @@ class LocalDiskStorage(StorageInterface):
         target_path = target_dir / stored_name
         target_path.write_bytes(content)
 
-        return f"/{settings.uploads_dir}/{subfolder}/{stored_name}"
+        return f"/{settings.uploads_url_prefix}/{subfolder}/{stored_name}"
 
     async def delete(self, url: str) -> None:
-        relative_path = url.lstrip("/")
-        target_path = Path(relative_path)
-        if target_path.exists():
+        target_path = resolve_uploaded_file_path(url)
+        if target_path is not None and target_path.exists():
             target_path.unlink()
 
 

@@ -11,6 +11,7 @@ from app.core.config import settings
 from app.db.session import engine
 from app.exceptions.handlers import register_exception_handlers
 from app.middleware.context import RequestContextMiddleware
+from app.modules.ai_credits.cron import run_monthly_rollover_job, start_ai_credit_scheduler, stop_ai_credit_scheduler
 
 
 @asynccontextmanager
@@ -18,7 +19,13 @@ async def lifespan(app: FastAPI):
     Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
     Path(settings.log_dir).mkdir(parents=True, exist_ok=True)
     configure_logging()
+    # Runs once immediately (self-heals any month missed while the app was
+    # down — the job is idempotent), then the scheduler takes over for the
+    # 1st-of-month trigger going forward.
+    await run_monthly_rollover_job()
+    start_ai_credit_scheduler()
     yield
+    stop_ai_credit_scheduler()
     await engine.dispose()
 
 
@@ -48,7 +55,7 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
     app.include_router(api_v1_router)
     Path(settings.uploads_dir).mkdir(parents=True, exist_ok=True)
-    app.mount(f"/{settings.uploads_dir}", StaticFiles(directory=settings.uploads_dir), name="uploads")
+    app.mount(f"/{settings.uploads_url_prefix}", StaticFiles(directory=settings.uploads_dir), name="uploads")
 
     @app.get("/health", tags=["Health"])
     async def health_check() -> dict:

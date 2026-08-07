@@ -32,7 +32,10 @@ class AdminUser(BaseModel, SoftDeleteMixin):
     is_super_admin: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     name: Mapped[str] = mapped_column(String(250), nullable=False)
     date_of_birth: Mapped[date | None] = mapped_column(Date, nullable=True)
-    email: Mapped[str] = mapped_column(String(255), nullable=False)
+    # Nullable — a temp password is now emailed only if an email is on file;
+    # an admin can create a sub-admin without one and hand over credentials
+    # via the CredentialsDialog shown in the frontend instead.
+    email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     phone_number: Mapped[str] = mapped_column(String(20), nullable=False)
     address: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pin_code: Mapped[str] = mapped_column(String(10), nullable=False)

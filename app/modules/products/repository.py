@@ -1,6 +1,6 @@
 import uuid
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.base_repository import BaseRepository
@@ -17,6 +17,57 @@ class ProductRepository(BaseRepository[Product]):
         stmt = self._base_select().where(Product.supplier_id == supplier_id, Product.bar_code == bar_code)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
+
+    async def list_for_customer(
+        self,
+        child_category_id: uuid.UUID | None,
+        search: str | None,
+        min_price: float | None,
+        max_price: float | None,
+        filter_value_ids: list[uuid.UUID],
+        offset: int,
+        limit: int | None,
+        visible_supplier_ids: list[uuid.UUID] | None = None,
+    ) -> tuple[list[Product], int]:
+        """Active products only. visible_supplier_ids=None means unscoped (the
+        anonymous/Shopify-embed path — no customer identity to scope by); a
+        real customer always passes a list (their mapped suppliers plus their
+        own, if they're a linked supplier identity) — an empty list correctly
+        yields zero products, not everything. Each selected filter_value_id
+        narrows the result further (a product must have ALL of them assigned,
+        not any)."""
+        stmt = self._base_select().where(Product.is_active.is_(True))
+        if visible_supplier_ids is not None:
+            stmt = stmt.where(Product.supplier_id.in_(visible_supplier_ids))
+        if child_category_id is not None:
+            stmt = stmt.where(Product.child_category_id == child_category_id)
+        if search:
+            stmt = stmt.where(
+                or_(
+                    Product.catalog_name.ilike(f"%{search}%"),
+                    Product.design_no.ilike(f"%{search}%"),
+                    Product.bar_code.ilike(f"%{search}%"),
+                )
+            )
+        if min_price is not None:
+            stmt = stmt.where(Product.rate >= min_price)
+        if max_price is not None:
+            stmt = stmt.where(Product.rate <= max_price)
+        for filter_value_id in filter_value_ids:
+            stmt = stmt.where(
+                Product.id.in_(
+                    select(ProductFilterValue.product_id).where(
+                        ProductFilterValue.filter_value_id == filter_value_id
+                    )
+                )
+            )
+
+        total = await self.session.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+        stmt = stmt.order_by(Product.order_no.asc(), Product.created_at.desc()).offset(offset)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all()), total
 
 
 class ProductFilterValueRepository:

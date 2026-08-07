@@ -29,6 +29,18 @@ class Settings(BaseSettings):
 
     # Base URL of the React admin app — used to build the password-reset email link.
     frontend_url: str = "http://localhost:5173"
+    # Base URL of the *customer-facing* storefront (a different app/domain from
+    # frontend_url above) — used to build the /verify?customer-code=...&filter-value=...
+    # URL encoded into generated QR codes. That /verify route + its query param
+    # names (hyphenated, not underscored) already exist and are load-bearing in
+    # homexperia-client-frontend's VerifyToken.jsx; this must match exactly.
+    customer_frontend_url: str = "https://homexperia.com"
+    # Shared secret the client-frontend's QR/deep-link auto-login flow sends
+    # as the literal header "x_key" (underscore, not the usual hyphen) —
+    # matches VITE_X_KEY, already baked into that app's .env. Not meant to be
+    # secure against a determined attacker (same tier as visualizer_service_key
+    # below); it's the real, existing contract, not something invented here.
+    customer_code_login_key: str = "9f8c1c6a-1a5c-4f8d-b7a0-6c2e4c5f9b12"
 
     smtp_host: str = ""
     smtp_port: int = 587
@@ -36,8 +48,33 @@ class Settings(BaseSettings):
     smtp_password: str = ""
     smtp_from_name: str = "HomeXperia Admin"
 
+    # Where uploaded files actually live on disk — dev default is a relative
+    # path (resolved from wherever the process starts), but in production this
+    # should be set to an absolute path outside the deployment directory
+    # (e.g. a mounted volume) so files survive a redeploy. Deliberately
+    # decoupled from uploads_url_prefix below: the URL clients see must stay
+    # "/uploads/..." regardless of where the directory physically is,
+    # otherwise an absolute UPLOADS_DIR would leak into the URL itself.
     uploads_dir: str = "uploads"
+    # The URL path segment files are served under — always "uploads", never
+    # derived from uploads_dir. See LocalDiskStorage and app.main's static mount.
+    uploads_url_prefix: str = "uploads"
     log_dir: str = "logs"
+
+    # Room visualizer (ported from the client's Flask backend) — external service
+    # credentials, none of which existed in this codebase before that port.
+    sam_api_url: str = ""
+    sam_api_key: str = ""
+    prod_segmentation_api_url: str = "https://api.homexperia.com/api/upload"
+    prod_segmentation_api_key: str = ""
+    openai_api_key: str = ""
+    # Flask hardcoded this True unconditionally, writing to a Debugs/ folder that
+    # isn't guaranteed to exist. Default off here — an explicit, safer default.
+    visualizer_debug_images: bool = False
+    # Shared secret for callers with no Homexperia login at all (Shopify-embed
+    # pages) — replaces Flask's hardcoded "this_is_api_key" literal with a real
+    # configurable value. See get_current_customer_optional.
+    visualizer_service_key: str = ""
 
     @property
     def cors_origins(self) -> list[str]:

@@ -8,7 +8,7 @@ class AdminUserProfile(BaseModel):
     id: uuid.UUID
     name: str
     username: str
-    email: str
+    email: str | None
     is_super_admin: bool
     profile_image_url: str | None = None
 
@@ -67,7 +67,7 @@ class MeResponse(BaseModel):
     id: uuid.UUID
     name: str
     username: str
-    email: str
+    email: str | None
     is_super_admin: bool
     permitted_module_keys: list[str]
 
@@ -76,7 +76,7 @@ class MyProfileResponse(BaseModel):
     id: uuid.UUID
     name: str
     date_of_birth: date | None
-    email: str
+    email: str | None
     address: str | None
     phone_number: str
     pin_code: str
@@ -93,7 +93,7 @@ class MyProfileResponse(BaseModel):
 class UpdateMyProfileRequest(BaseModel):
     name: str = Field(min_length=1, max_length=250)
     date_of_birth: date | None = None
-    email: EmailStr
+    email: EmailStr | None = None
     address: str | None = None
     phone_number: str = Field(min_length=10, max_length=20)
     pin_code: str = Field(min_length=4, max_length=10)

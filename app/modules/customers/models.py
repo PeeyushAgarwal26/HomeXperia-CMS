@@ -24,6 +24,12 @@ class Customer(BaseModel, SoftDeleteMixin):
         Index("ix_customers_email", "email", unique=True, postgresql_where="deleted_at IS NULL"),
         Index("ix_customers_is_active", "is_active"),
         Index("ix_customers_state_code", "state_code"),
+        Index(
+            "ix_customers_linked_supplier_id",
+            "linked_supplier_id",
+            unique=True,
+            postgresql_where="deleted_at IS NULL",
+        ),
     )
 
     name: Mapped[str] = mapped_column(String(250), nullable=False)
@@ -45,6 +51,14 @@ class Customer(BaseModel, SoftDeleteMixin):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("admin_users.id"), nullable=True
+    )
+    # This customer's OWN supplier identity, if they've been promoted (opt-in
+    # — see CustomerService.promote_to_supplier). AiCreditService resolves
+    # billing through this column: whoever is actually logged in and using
+    # the visualizer pays, not whichever supplier owns the product they're
+    # looking at. NULL for a plain customer who has never supplied anything.
+    linked_supplier_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("suppliers.id"), nullable=True
     )
 
 
@@ -71,8 +85,9 @@ class SupplierCustomerTheme(BaseModel):
     """Supplier -> My Customers -> Theme. Branding a supplier has configured for one
     specific customer's future storefront — scoped per (supplier, customer) pair,
     since the same customer may see different branding from each supplier they work
-    with. primary_color is a placeholder field; the real field set is still pending
-    discussion with the client — this table is built to grow more columns later."""
+    with. primary_color/secondary_color are placeholder fields; the real field set is
+    still pending discussion with the client — this table is built to grow more
+    columns later."""
 
     __tablename__ = "supplier_customer_themes"
     __table_args__ = (
@@ -87,3 +102,4 @@ class SupplierCustomerTheme(BaseModel):
         UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
     )
     primary_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    secondary_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
