@@ -94,7 +94,7 @@ def generate_invoice_pdf(order: Order, customer: Customer, items: list[OrderItem
             _table_header(pdf)
             pdf.set_font("helvetica", "", 9)
         size_label = f'{item.width:g}"' if item.width is not None else "-"
-        pdf.cell(_COLUMN_WIDTHS["item"], 8, item.catalog_name[:28], border=1)
+        pdf.cell(_COLUMN_WIDTHS["item"], 8, (item.catalog_name or "")[:28], border=1)
         pdf.cell(_COLUMN_WIDTHS["category"], 8, (item.category_name or "-")[:16], border=1, align="C")
         pdf.cell(_COLUMN_WIDTHS["design_no"], 8, item.design_no or "-", border=1, align="C")
         pdf.cell(_COLUMN_WIDTHS["size"], 8, size_label, border=1, align="C")

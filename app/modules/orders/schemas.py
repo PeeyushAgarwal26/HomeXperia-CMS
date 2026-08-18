@@ -20,7 +20,7 @@ class CartItemDeleteRequest(BaseModel):
 
 class CartItemDetail(BaseModel):
     product_id: uuid.UUID
-    catalog_name: str
+    catalog_name: str | None
     design_no: str | None
     image_url: str | None
     uom: str
@@ -86,7 +86,7 @@ class MyOrderListItem(BaseModel):
 class OrderItemDetail(BaseModel):
     id: uuid.UUID
     product_id: uuid.UUID | None
-    catalog_name: str
+    catalog_name: str | None
     design_no: str | None
     image_url: str | None
     supplier_name: str | None

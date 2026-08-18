@@ -185,6 +185,12 @@ class CustomerService:
             }
         )
         await self.repository.update(customer_id, {"linked_supplier_id": supplier.id})
+        existing_supplier_ids = await self.supplier_map_repository.get_supplier_ids(customer_id)
+        await self.supplier_map_repository.replace(
+            customer_id,
+            list(dict.fromkeys([*existing_supplier_ids, supplier.id])),
+            mapped_by=created_by,
+        )
 
         if customer.email:
             try:

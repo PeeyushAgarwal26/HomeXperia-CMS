@@ -224,7 +224,7 @@ class QrGeneratorService:
                     id=key_id,
                     hotspot_id=row.hotspot_id,
                     product_id=row.product_id,
-                    product_name=product.catalog_name if product else "",
+                    product_name=(product.catalog_name if product else None) or "",
                     product_image_url=product.image_url if product else None,
                     product_width=float(product.width) if product and product.width is not None else None,
                     label=label,

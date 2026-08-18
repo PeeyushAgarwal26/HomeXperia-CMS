@@ -84,6 +84,9 @@ class ProductService:
     async def get_filter_value_ids(self, product_id: uuid.UUID) -> list[uuid.UUID]:
         return await self.product_filter_value_repository.get_filter_value_ids(product_id)
 
+    async def get_catalogue_names_map(self, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+        return await self.product_filter_value_repository.get_catalogue_names_map(product_ids)
+
     async def get_filter_value_details(
         self, filter_value_ids: list[uuid.UUID]
     ) -> list[ProductFilterValueDetail]:

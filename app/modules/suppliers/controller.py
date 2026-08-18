@@ -232,6 +232,9 @@ async def set_supplier_permissions(
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
     await SupplierService(session).set_permissions(
-        supplier_id, body.module_keys, granted_by=current_admin.id
+        supplier_id,
+        body.module_keys,
+        granted_by=current_admin.id,
+        granted_by_is_super_admin=current_admin.is_super_admin,
     )
     return controller.success(message="Permissions updated.")

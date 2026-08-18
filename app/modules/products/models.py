@@ -33,14 +33,14 @@ class Product(BaseModel, SoftDeleteMixin):
     )
     supplier: Mapped[Supplier] = relationship(Supplier, lazy="joined")
     order_no: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    catalog_name: Mapped[str] = mapped_column(String(250), nullable=False)
+    catalog_name: Mapped[str | None] = mapped_column(String(250), nullable=True)
     design_no: Mapped[str | None] = mapped_column(String(100), nullable=True)
     bar_code: Mapped[str] = mapped_column(String(100), nullable=False)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     available_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     rate: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
-    length: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
-    width: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    length: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
+    width: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
 

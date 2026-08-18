@@ -86,7 +86,7 @@ class OrderItem(Base):
     product_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("products.id", ondelete="SET NULL"), nullable=True
     )
-    catalog_name: Mapped[str] = mapped_column(String(250), nullable=False)
+    catalog_name: Mapped[str | None] = mapped_column(String(250), nullable=True)
     design_no: Mapped[str | None] = mapped_column(String(100), nullable=True)
     image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     # Also snapshotted, same reasoning as catalog_name/design_no/rate above —

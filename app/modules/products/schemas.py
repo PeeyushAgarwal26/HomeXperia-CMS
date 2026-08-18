@@ -12,14 +12,15 @@ class ProductListItem(BaseModel):
     child_category_name: str
     supplier_id: uuid.UUID
     supplier_name: str
-    catalog_name: str
+    catalog_name: str | None
+    catalogue_name: str | None
     design_no: str | None
     bar_code: str
     image_url: str | None
     available_quantity: int | None
     rate: float | None
-    length: float
-    width: float
+    length: float | None
+    width: float | None
     is_active: bool
 
 
@@ -37,14 +38,15 @@ class ProductDetail(BaseModel):
     child_category_name: str
     supplier_id: uuid.UUID
     supplier_name: str
-    catalog_name: str
+    catalog_name: str | None
+    catalogue_name: str | None
     design_no: str | None
     bar_code: str
     image_url: str | None
     available_quantity: int | None
     rate: float | None
-    length: float
-    width: float
+    length: float | None
+    width: float | None
     is_active: bool
     filter_value_ids: list[uuid.UUID]
     filter_values: list[ProductFilterValueDetail]
@@ -56,14 +58,13 @@ class ProductCreateRequest(BaseModel):
     child_category_id: uuid.UUID
     supplier_id: uuid.UUID
     order_no: int = Field(ge=0)
-    catalog_name: str = Field(min_length=1, max_length=250)
     design_no: str | None = None
     bar_code: str = Field(min_length=1, max_length=100)
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    length: float
-    width: float
+    length: float | None = Field(default=None, ge=0)
+    width: float | None = Field(default=None, ge=0)
     filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
@@ -71,14 +72,13 @@ class ProductUpdateRequest(BaseModel):
     child_category_id: uuid.UUID
     supplier_id: uuid.UUID
     order_no: int = Field(ge=0)
-    catalog_name: str = Field(min_length=1, max_length=250)
     design_no: str | None = None
     bar_code: str = Field(min_length=1, max_length=100)
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    length: float
-    width: float
+    length: float | None = Field(default=None, ge=0)
+    width: float | None = Field(default=None, ge=0)
     filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
@@ -89,28 +89,26 @@ class ProductUpdateRequest(BaseModel):
 class SupplierProductCreateRequest(BaseModel):
     child_category_id: uuid.UUID
     order_no: int = Field(ge=0)
-    catalog_name: str = Field(min_length=1, max_length=250)
     design_no: str | None = None
     bar_code: str = Field(min_length=1, max_length=100)
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    length: float
-    width: float
+    length: float | None = Field(default=None, ge=0)
+    width: float | None = Field(default=None, ge=0)
     filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
 class SupplierProductUpdateRequest(BaseModel):
     child_category_id: uuid.UUID
     order_no: int = Field(ge=0)
-    catalog_name: str = Field(min_length=1, max_length=250)
     design_no: str | None = None
     bar_code: str = Field(min_length=1, max_length=100)
     image_url: str | None = None
     available_quantity: int | None = Field(default=None, ge=0)
     rate: float | None = Field(default=None, ge=0)
-    length: float
-    width: float
+    length: float | None = Field(default=None, ge=0)
+    width: float | None = Field(default=None, ge=0)
     filter_value_ids: list[uuid.UUID] = Field(default_factory=list)
 
 
@@ -138,12 +136,12 @@ class ProductCustomerItem(BaseModel):
     alternate key name some UI components read."""
 
     product_id: uuid.UUID
-    product_name: str
-    catalog_name: str
+    product_name: str | None
+    catalog_name: str | None
     design_no: str | None
     product_image: str | None
     thumbnail: str | None
     rate: float | None
-    width: float
-    length: float
+    width: float | None
+    length: float | None
     child_category_id: uuid.UUID

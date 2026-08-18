@@ -5,7 +5,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginationParams, SortParams
 from app.core.security import generate_temp_password, hash_password
-from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
+from app.exceptions.http_exceptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+)
 from app.modules.admin_users.models import AdminUser
 from app.modules.admin_users.permissions_repository import AdminUserPermissionRepository
 from app.modules.admin_users.repository import AdminUserRepository
@@ -120,16 +125,42 @@ class AdminUserService:
         return await self.permission_repository.get_module_keys(admin_user_id)
 
     async def set_permissions(
-        self, admin_user_id: uuid.UUID, module_keys: list[str], granted_by: uuid.UUID
+        self,
+        admin_user_id: uuid.UUID,
+        module_keys: list[str],
+        granted_by: uuid.UUID,
+        granted_by_is_super_admin: bool = True,
     ) -> None:
+        """granted_by_is_super_admin defaults to True (unrestricted) so the
+        DEFAULT_MODULE_KEYS baseline grant in create() — every admin's own
+        dashboard/change-password/log-off access — is never blocked by this
+        check; only the explicit Assign Access endpoint passes the caller's
+        real is_super_admin, restricting a sub-admin to handing out modules
+        it was itself granted."""
         await self.get_sub_admin(admin_user_id)
 
-        unique_keys = list(dict.fromkeys(module_keys))
-        key_to_id = await self.module_repository.get_ids_for_keys(unique_keys)
-        unknown_keys = set(unique_keys) - set(key_to_id.keys())
+        unique_keys = set(dict.fromkeys(module_keys))
+        known_keys = set((await self.module_repository.get_ids_for_keys(list(unique_keys))).keys())
+        unknown_keys = unique_keys - known_keys
         if unknown_keys:
             raise BadRequestException(f"Unknown module key(s): {', '.join(sorted(unknown_keys))}")
 
+        if not granted_by_is_super_admin:
+            grantable_keys = set(await self.permission_repository.get_module_keys(granted_by))
+            previous_keys = set(await self.permission_repository.get_module_keys(admin_user_id))
+            out_of_scope_previous = previous_keys - grantable_keys
+            newly_granted_out_of_scope = (unique_keys - grantable_keys) - out_of_scope_previous
+            if newly_granted_out_of_scope:
+                raise ForbiddenException(
+                    "You can only grant modules you yourself have access to. Not permitted: "
+                    f"{', '.join(sorted(newly_granted_out_of_scope))}."
+                )
+            # Modules outside the caller's own scope are invisible to them in the
+            # UI, so they can neither grant nor revoke them — always carried
+            # forward exactly as they were, regardless of what was submitted.
+            unique_keys = unique_keys | out_of_scope_previous
+
+        key_to_id = await self.module_repository.get_ids_for_keys(list(unique_keys))
         await self.permission_repository.replace(
             admin_user_id, list(key_to_id.values()), granted_by=granted_by
         )

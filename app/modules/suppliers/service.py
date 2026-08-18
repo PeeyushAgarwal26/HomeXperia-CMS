@@ -5,7 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginationParams, SortParams
 from app.core.security import generate_temp_password, hash_password
-from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
+from app.exceptions.http_exceptions import (
+    BadRequestException,
+    ConflictException,
+    ForbiddenException,
+    NotFoundException,
+)
+from app.modules.admin_users.permissions_repository import AdminUserPermissionRepository
 from app.modules.categories.repository import CategoryRepository
 from app.modules.customers.repository import CustomerRepository
 from app.modules.customers.suppliers_repository import CustomerSupplierRepository
@@ -38,6 +44,7 @@ class SupplierService:
         self.filter_value_repository = FilterValueRepository(session)
         self.customer_supplier_repository = CustomerSupplierRepository(session)
         self.customer_repository = CustomerRepository(session)
+        self.admin_permission_repository = AdminUserPermissionRepository(session)
 
     async def list_suppliers(
         self, pagination: PaginationParams, sort: SortParams, search: str | None
@@ -146,6 +153,7 @@ class SupplierService:
             }
         )
         await self.repository.update(supplier_id, {"linked_customer_id": customer.id})
+        await self.customer_supplier_repository.replace(customer.id, [supplier_id], mapped_by=created_by)
 
         if supplier.email:
             try:
@@ -238,16 +246,36 @@ class SupplierService:
         return await self.permission_repository.get_module_keys(supplier_id)
 
     async def set_permissions(
-        self, supplier_id: uuid.UUID, module_keys: list[str], granted_by: uuid.UUID
+        self,
+        supplier_id: uuid.UUID,
+        module_keys: list[str],
+        granted_by: uuid.UUID,
+        granted_by_is_super_admin: bool,
     ) -> None:
         await self.get_supplier(supplier_id)
 
-        unique_keys = list(dict.fromkeys(module_keys))
-        key_to_id = await self.module_repository.get_ids_for_keys(unique_keys)
-        unknown_keys = set(unique_keys) - set(key_to_id.keys())
+        unique_keys = set(dict.fromkeys(module_keys))
+        known_keys = set((await self.module_repository.get_ids_for_keys(list(unique_keys))).keys())
+        unknown_keys = unique_keys - known_keys
         if unknown_keys:
             raise BadRequestException(f"Unknown module key(s): {', '.join(sorted(unknown_keys))}")
 
+        if not granted_by_is_super_admin:
+            grantable_keys = set(await self.admin_permission_repository.get_module_keys(granted_by))
+            previous_keys = set(await self.permission_repository.get_module_keys(supplier_id))
+            out_of_scope_previous = previous_keys - grantable_keys
+            newly_granted_out_of_scope = (unique_keys - grantable_keys) - out_of_scope_previous
+            if newly_granted_out_of_scope:
+                raise ForbiddenException(
+                    "You can only grant modules you yourself have access to. Not permitted: "
+                    f"{', '.join(sorted(newly_granted_out_of_scope))}."
+                )
+            # Modules outside the caller's own scope are invisible to them in the
+            # UI, so they can neither grant nor revoke them — always carried
+            # forward exactly as they were, regardless of what was submitted.
+            unique_keys = unique_keys | out_of_scope_previous
+
+        key_to_id = await self.module_repository.get_ids_for_keys(list(unique_keys))
         await self.permission_repository.replace(
             supplier_id, list(key_to_id.values()), granted_by=granted_by
         )

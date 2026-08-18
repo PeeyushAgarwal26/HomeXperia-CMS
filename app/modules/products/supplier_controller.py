@@ -30,6 +30,16 @@ router = APIRouter(prefix="/supplier/products", tags=["Supplier Products"])
 controller = BaseController()
 
 
+CATALOGUE_NAME_FILTER = "catalogue name"
+
+
+def _catalogue_name_from_filter_values(filter_values: list[ProductFilterValueDetail]) -> str | None:
+    for filter_value in filter_values:
+        if filter_value.filter_name.strip().lower() == CATALOGUE_NAME_FILTER:
+            return filter_value.value
+    return None
+
+
 def _to_detail(
     item: Product,
     filter_value_ids: list[uuid.UUID],
@@ -43,13 +53,14 @@ def _to_detail(
         supplier_id=item.supplier_id,
         supplier_name=item.supplier.name,
         catalog_name=item.catalog_name,
+        catalogue_name=_catalogue_name_from_filter_values(filter_values),
         design_no=item.design_no,
         bar_code=item.bar_code,
         image_url=item.image_url,
         available_quantity=item.available_quantity,
         rate=float(item.rate) if item.rate is not None else None,
-        length=float(item.length),
-        width=float(item.width),
+        length=float(item.length) if item.length is not None else None,
+        width=float(item.width) if item.width is not None else None,
         is_active=item.is_active,
         filter_value_ids=filter_value_ids,
         filter_values=filter_values,
@@ -58,7 +69,7 @@ def _to_detail(
     )
 
 
-def _to_list_item(item: Product, sno: int) -> ProductListItem:
+def _to_list_item(item: Product, sno: int, catalogue_name: str | None) -> ProductListItem:
     return ProductListItem(
         id=item.id,
         sno=sno,
@@ -68,13 +79,14 @@ def _to_list_item(item: Product, sno: int) -> ProductListItem:
         supplier_id=item.supplier_id,
         supplier_name=item.supplier.name,
         catalog_name=item.catalog_name,
+        catalogue_name=catalogue_name,
         design_no=item.design_no,
         bar_code=item.bar_code,
         image_url=item.image_url,
         available_quantity=item.available_quantity,
         rate=float(item.rate) if item.rate is not None else None,
-        length=float(item.length),
-        width=float(item.width),
+        length=float(item.length) if item.length is not None else None,
+        width=float(item.width) if item.width is not None else None,
         is_active=item.is_active,
     )
 
@@ -103,8 +115,9 @@ async def list_my_products(
     items, total = await service.list_products(
         pagination, sort, filters.search, child_category_id, supplier.id
     )
+    catalogue_names = await service.get_catalogue_names_map([item.id for item in items])
     start = pagination.offset + 1
-    data = [_to_list_item(item, start + i) for i, item in enumerate(items)]
+    data = [_to_list_item(item, start + i, catalogue_names.get(item.id)) for i, item in enumerate(items)]
     return controller.paginated(data=data, total=total, page=pagination.page, page_size=pagination.page_size)
 
 

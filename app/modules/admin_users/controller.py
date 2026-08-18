@@ -145,6 +145,9 @@ async def set_sub_admin_permissions(
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
     await AdminUserService(session).set_permissions(
-        admin_user_id, body.module_keys, granted_by=current_admin.id
+        admin_user_id,
+        body.module_keys,
+        granted_by=current_admin.id,
+        granted_by_is_super_admin=current_admin.is_super_admin,
     )
     return controller.success(message="Permissions updated.")

@@ -4,7 +4,10 @@ from sqlalchemy import delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.base_repository import BaseRepository
+from app.modules.filters.models import Filter, FilterValue
 from app.modules.products.models import Product, ProductFilterValue
+
+CATALOGUE_NAME_FILTER = "catalogue name"
 
 
 class ProductRepository(BaseRepository[Product]):
@@ -86,6 +89,24 @@ class ProductFilterValueRepository:
             .where(ProductFilterValue.filter_value_id == filter_value_id, Product.deleted_at.is_(None))
         )
         return (await self.session.scalar(stmt)) or 0
+
+    async def get_catalogue_names_map(self, product_ids: list[uuid.UUID]) -> dict[uuid.UUID, str]:
+        """Batch lookup of each product's "Catalogue Name" Filter Value (a real,
+        supplier-curated attribute), used to display it in place of the free-text
+        Product.catalog_name column on the admin/supplier list pages."""
+        if not product_ids:
+            return {}
+        stmt = (
+            select(ProductFilterValue.product_id, FilterValue.value)
+            .join(FilterValue, FilterValue.id == ProductFilterValue.filter_value_id)
+            .join(Filter, Filter.id == FilterValue.filter_id)
+            .where(
+                ProductFilterValue.product_id.in_(product_ids),
+                func.lower(Filter.name) == CATALOGUE_NAME_FILTER,
+            )
+        )
+        result = await self.session.execute(stmt)
+        return {row.product_id: row.value for row in result}
 
     async def replace(self, product_id: uuid.UUID, filter_value_ids: list[uuid.UUID]) -> None:
         await self.session.execute(
