@@ -43,6 +43,16 @@ class Customer(BaseModel, SoftDeleteMixin):
     state: Mapped[State | None] = relationship(State, lazy="joined")
     city: Mapped[str | None] = mapped_column(String(100), nullable=True)
     profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # This customer's own business logo — distinct from profile_image_url
+    # (a personal avatar). Mirrors Supplier.logo_url; lets the client-facing
+    # app show a real logo for whoever's logged in, not just for suppliers.
+    logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # This customer's OWN theme, set directly by admin/sub-admin — independent
+    # of any supplier. Distinct from SupplierCustomerTheme (per supplier↔customer
+    # pair, supplier- or admin-on-a-supplier's-behalf-set); this is the theme
+    # that applies to this customer's account itself, with no supplier involved.
+    primary_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    secondary_color: Mapped[str | None] = mapped_column(String(20), nullable=True)
     device_limit: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=1)
     active_device_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

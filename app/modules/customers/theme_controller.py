@@ -12,8 +12,10 @@ from app.db.session import get_db_session
 from app.modules.admin_users.models import AdminUser
 from app.modules.customers.models import Customer
 from app.modules.customers.schemas import (
+    CustomerDirectThemeDetail,
     CustomerListItem,
     CustomerSupplierThemeItem,
+    UpdateCustomerDirectThemeRequest,
     UpdateCustomerSupplierThemeRequest,
 )
 from app.modules.customers.service import CustomerService
@@ -30,6 +32,7 @@ def _to_list_item(item: Customer, sno: int, suppliers: list[str]) -> CustomerLis
         sno=sno,
         name=item.name,
         profile_image_url=item.profile_image_url,
+        logo_url=item.logo_url,
         customer_code=item.customer_code,
         email=item.email,
         phone_number=item.phone_number,
@@ -98,6 +101,48 @@ async def update_customer_supplier_theme(
             supplier_name=supplier_name,
             primary_color=body.primary_color,
             secondary_color=body.secondary_color,
+        ),
+        message="Theme updated successfully.",
+    )
+
+
+@router.get(
+    "/customers/{customer_id}/direct-theme",
+    response_model=APIResponse[CustomerDirectThemeDetail],
+)
+async def get_customer_direct_theme(
+    customer_id: uuid.UUID,
+    _: AdminUser = Depends(_require_theme_config_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    customer = await CustomerService(session).get_customer_direct_theme(customer_id)
+    return controller.success(
+        data=CustomerDirectThemeDetail(
+            customer_id=customer.id,
+            primary_color=customer.primary_color,
+            secondary_color=customer.secondary_color,
+        )
+    )
+
+
+@router.put(
+    "/customers/{customer_id}/direct-theme",
+    response_model=APIResponse[CustomerDirectThemeDetail],
+)
+async def update_customer_direct_theme(
+    customer_id: uuid.UUID,
+    body: UpdateCustomerDirectThemeRequest,
+    _: AdminUser = Depends(_require_theme_config_access),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    customer = await CustomerService(session).set_customer_direct_theme(
+        customer_id, body.primary_color, body.secondary_color
+    )
+    return controller.success(
+        data=CustomerDirectThemeDetail(
+            customer_id=customer.id,
+            primary_color=customer.primary_color,
+            secondary_color=customer.secondary_color,
         ),
         message="Theme updated successfully.",
     )

@@ -26,6 +26,10 @@ class SupplierRefreshToken(Base):
     issued_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # See auth.models.RefreshToken.session_started_at — carried forward
+    # unchanged on every rotation, used to enforce the absolute session cap
+    # independent of how recently the token itself was rotated.
+    session_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)

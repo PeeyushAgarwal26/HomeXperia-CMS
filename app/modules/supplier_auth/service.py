@@ -39,6 +39,7 @@ def _to_profile(supplier: Supplier) -> SupplierProfile:
         username=supplier.username,
         email=supplier.email,
         logo_url=supplier.logo_url,
+        profile_image_url=supplier.profile_image_url,
     )
 
 
@@ -52,14 +53,20 @@ class SupplierAuthService:
         self.permission_repo = SupplierPermissionRepository(session)
 
     async def _issue_token_pair(
-        self, supplier: Supplier, ip_address: str | None, user_agent: str | None
+        self,
+        supplier: Supplier,
+        ip_address: str | None,
+        user_agent: str | None,
+        session_started_at: datetime,
     ) -> TokenPair:
         # "type": "supplier_access" (not the admin path's "access") so a supplier
         # token can never be accepted by get_current_user, or vice versa.
         access_token = create_access_token(str(supplier.id), extra={"type": "supplier_access"})
         raw_refresh, refresh_hash = generate_refresh_token()
         expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
-        await self.refresh_token_repo.create(supplier.id, refresh_hash, expires_at, ip_address, user_agent)
+        await self.refresh_token_repo.create(
+            supplier.id, refresh_hash, expires_at, session_started_at, ip_address, user_agent
+        )
         return TokenPair(access_token=access_token, refresh_token=raw_refresh)
 
     async def login(
@@ -72,7 +79,9 @@ class SupplierAuthService:
             raise UnauthorizedException("Account is deactivated.")
 
         await self.login_event_repo.create(supplier.id, ip_address, user_agent)
-        tokens = await self._issue_token_pair(supplier, ip_address, user_agent)
+        tokens = await self._issue_token_pair(
+            supplier, ip_address, user_agent, session_started_at=datetime.now(timezone.utc)
+        )
         return SupplierLoginResponse(
             access_token=tokens.access_token,
             refresh_token=tokens.refresh_token,
@@ -85,6 +94,10 @@ class SupplierAuthService:
         stored = await self.refresh_token_repo.get_unexpired_by_hash(hash_token(raw_refresh_token))
         if stored is None:
             raise UnauthorizedException("Invalid or expired refresh token.")
+
+        session_age = datetime.now(timezone.utc) - stored.session_started_at
+        if session_age > timedelta(days=settings.absolute_session_expire_days):
+            raise UnauthorizedException("Session expired — please log in again.")
 
         if stored.revoked_at is not None:
             reused_within_grace_period = (
@@ -99,7 +112,9 @@ class SupplierAuthService:
         if supplier is None or not supplier.is_active:
             raise UnauthorizedException("Account is no longer active.")
 
-        return await self._issue_token_pair(supplier, ip_address, user_agent)
+        return await self._issue_token_pair(
+            supplier, ip_address, user_agent, session_started_at=stored.session_started_at
+        )
 
     async def logout(self, supplier_id: uuid.UUID, raw_refresh_token: str) -> None:
         stored = await self.refresh_token_repo.get_valid_by_hash(hash_token(raw_refresh_token))

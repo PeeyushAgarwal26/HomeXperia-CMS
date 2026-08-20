@@ -16,6 +16,7 @@ class RefreshTokenRepository:
         admin_user_id: uuid.UUID,
         token_hash: str,
         expires_at: datetime,
+        session_started_at: datetime,
         ip_address: str | None = None,
         user_agent: str | None = None,
     ) -> RefreshToken:
@@ -23,6 +24,7 @@ class RefreshTokenRepository:
             admin_user_id=admin_user_id,
             token_hash=token_hash,
             expires_at=expires_at,
+            session_started_at=session_started_at,
             ip_address=ip_address,
             user_agent=user_agent,
         )

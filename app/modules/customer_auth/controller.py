@@ -10,7 +10,9 @@ from app.modules.customer_auth.schemas import (
     CustomerLoginRequest,
     CustomerLoginResponse,
     CustomerLogoutRequest,
+    CustomerMyProfileResponse,
     CustomerRefreshRequest,
+    UpdateCustomerMyProfileRequest,
 )
 from app.modules.customer_auth.service import CustomerAuthService
 from app.modules.customers.models import Customer
@@ -59,3 +61,21 @@ async def customer_logout(
 ) -> APIResponse:
     await CustomerAuthService(session).logout(customer.id, body.refresh_token)
     return controller.success(message="Logged out.")
+
+
+@router.get("/me/profile", response_model=APIResponse[CustomerMyProfileResponse])
+async def get_my_profile(customer: Customer = Depends(get_current_customer)) -> APIResponse:
+    return controller.success(data=CustomerMyProfileResponse.model_validate(customer, from_attributes=True))
+
+
+@router.put("/me/profile", response_model=APIResponse[CustomerMyProfileResponse])
+async def update_my_profile(
+    body: UpdateCustomerMyProfileRequest,
+    customer: Customer = Depends(get_current_customer),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    updated = await CustomerAuthService(session).update_my_profile(customer, body)
+    return controller.success(
+        data=CustomerMyProfileResponse.model_validate(updated, from_attributes=True),
+        message="Profile updated successfully.",
+    )

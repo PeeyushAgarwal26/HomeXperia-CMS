@@ -50,13 +50,21 @@ class AuthService:
         self.reset_token_repo = PasswordResetTokenRepository(session)
         self.login_event_repo = AdminUserLoginEventRepository(session)
 
-    async def _issue_token_pair(self, admin_user: AdminUser, ip_address: str | None, user_agent: str | None) -> TokenPair:
+    async def _issue_token_pair(
+        self,
+        admin_user: AdminUser,
+        ip_address: str | None,
+        user_agent: str | None,
+        session_started_at: datetime,
+    ) -> TokenPair:
         access_token = create_access_token(
             str(admin_user.id), extra={"is_super_admin": admin_user.is_super_admin}
         )
         raw_refresh, refresh_hash = generate_refresh_token()
         expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
-        await self.refresh_token_repo.create(admin_user.id, refresh_hash, expires_at, ip_address, user_agent)
+        await self.refresh_token_repo.create(
+            admin_user.id, refresh_hash, expires_at, session_started_at, ip_address, user_agent
+        )
         return TokenPair(access_token=access_token, refresh_token=raw_refresh)
 
     async def login(
@@ -69,7 +77,9 @@ class AuthService:
             raise UnauthorizedException("Account is deactivated.")
 
         await self.login_event_repo.create(admin_user.id, ip_address, user_agent)
-        tokens = await self._issue_token_pair(admin_user, ip_address, user_agent)
+        tokens = await self._issue_token_pair(
+            admin_user, ip_address, user_agent, session_started_at=datetime.now(timezone.utc)
+        )
         return LoginResponse(
             access_token=tokens.access_token,
             refresh_token=tokens.refresh_token,
@@ -123,6 +133,10 @@ class AuthService:
         if stored is None:
             raise UnauthorizedException("Invalid or expired refresh token.")
 
+        session_age = datetime.now(timezone.utc) - stored.session_started_at
+        if session_age > timedelta(days=settings.absolute_session_expire_days):
+            raise UnauthorizedException("Session expired — please log in again.")
+
         if stored.revoked_at is not None:
             reused_within_grace_period = (
                 datetime.now(timezone.utc) - stored.revoked_at <= REFRESH_TOKEN_REUSE_GRACE_PERIOD
@@ -139,7 +153,9 @@ class AuthService:
         if admin_user is None or not admin_user.is_active:
             raise UnauthorizedException("Account is no longer active.")
 
-        return await self._issue_token_pair(admin_user, ip_address, user_agent)
+        return await self._issue_token_pair(
+            admin_user, ip_address, user_agent, session_started_at=stored.session_started_at
+        )
 
     async def logout(self, admin_user_id: uuid.UUID, raw_refresh_token: str) -> None:
         stored = await self.refresh_token_repo.get_valid_by_hash(hash_token(raw_refresh_token))

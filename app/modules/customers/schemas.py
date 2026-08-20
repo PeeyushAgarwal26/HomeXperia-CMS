@@ -9,6 +9,7 @@ class CustomerListItem(BaseModel):
     sno: int
     name: str
     profile_image_url: str | None
+    logo_url: str | None
     customer_code: str
     email: str | None
     phone_number: str
@@ -33,6 +34,7 @@ class CustomerDetail(BaseModel):
     state_code: str | None
     city: str | None
     profile_image_url: str | None
+    logo_url: str | None
     device_limit: int
     customer_code: str
     is_active: bool
@@ -72,6 +74,7 @@ class CustomerCreateRequest(BaseModel):
     state_code: str = Field(min_length=1, max_length=10)
     city: str = Field(min_length=1, max_length=100)
     profile_image_url: str | None = None
+    logo_url: str | None = None
     device_limit: int = Field(ge=1, le=100)
     customer_code: str = Field(min_length=1, max_length=100)
     # Auto-provisions a linked Supplier identity (own username + emailed temp
@@ -107,6 +110,7 @@ class CustomerUpdateRequest(BaseModel):
     state_code: str = Field(min_length=1, max_length=10)
     city: str = Field(min_length=1, max_length=100)
     profile_image_url: str | None = None
+    logo_url: str | None = None
     device_limit: int = Field(ge=1, le=100)
     customer_code: str = Field(min_length=1, max_length=100)
     password: str | None = Field(default=None, min_length=8)
@@ -151,6 +155,21 @@ class CustomerThemeDetail(BaseModel):
 
 
 class UpdateCustomerThemeRequest(BaseModel):
+    primary_color: str | None = Field(default=None, max_length=20)
+    secondary_color: str | None = Field(default=None, max_length=20)
+
+
+# This customer's OWN theme (Customer.primary_color/secondary_color) — set
+# directly by admin/sub-admin, with no supplier involved. Distinct from
+# CustomerThemeDetail above, which is one specific supplier's branding for
+# this customer.
+class CustomerDirectThemeDetail(BaseModel):
+    customer_id: uuid.UUID
+    primary_color: str | None
+    secondary_color: str | None
+
+
+class UpdateCustomerDirectThemeRequest(BaseModel):
     primary_color: str | None = Field(default=None, max_length=20)
     secondary_color: str | None = Field(default=None, max_length=20)
 

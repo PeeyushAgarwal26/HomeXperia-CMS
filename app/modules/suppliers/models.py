@@ -41,6 +41,9 @@ class Supplier(BaseModel, SoftDeleteMixin):
     city: Mapped[str] = mapped_column(String(100), nullable=False)
     web_link: Mapped[str | None] = mapped_column(String(500), nullable=True)
     logo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    # Personal headshot/avatar — distinct from logo_url (the business's own
+    # branding, shown to customers). Self-editable, same as logo_url.
+    profile_image_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     username: Mapped[str] = mapped_column(String(100), nullable=False)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

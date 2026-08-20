@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, UploadFile
 
 from app.common.base_controller import BaseController
+from app.common.customer_deps import get_current_customer
 from app.common.deps import get_current_user
 from app.common.response import APIResponse
 from app.common.storage import StorageInterface, get_storage
 from app.common.supplier_deps import get_current_supplier
 from app.exceptions.http_exceptions import BadRequestException
 from app.modules.admin_users.models import AdminUser
+from app.modules.customers.models import Customer
 from app.modules.files.schemas import UploadResponse
 from app.modules.suppliers.models import Supplier
 
@@ -46,4 +48,15 @@ async def supplier_upload_file(
 ) -> APIResponse:
     await _validated_bytes(file)
     url = await storage.save(file, subfolder="products")
+    return controller.success(data=UploadResponse(url=url), message="File uploaded.")
+
+
+@router.post("/customer-upload", response_model=APIResponse[UploadResponse], status_code=201)
+async def customer_upload_file(
+    file: UploadFile,
+    _: Customer = Depends(get_current_customer),
+    storage: StorageInterface = Depends(get_storage),
+) -> APIResponse:
+    await _validated_bytes(file)
+    url = await storage.save(file, subfolder="customers")
     return controller.success(data=UploadResponse(url=url), message="File uploaded.")

@@ -16,6 +16,7 @@ class SupplierProfile(BaseModel):
     username: str
     email: str | None
     logo_url: str | None
+    profile_image_url: str | None
 
 
 class SupplierLoginResponse(TokenPair):
@@ -60,6 +61,7 @@ class SupplierMyProfileResponse(BaseModel):
     city: str
     web_link: str | None
     logo_url: str | None
+    profile_image_url: str | None
     username: str
 
 
@@ -78,3 +80,4 @@ class UpdateSupplierMyProfileRequest(BaseModel):
     city: str = Field(min_length=1, max_length=100)
     web_link: str | None = None
     logo_url: str | None = None
+    profile_image_url: str | None = None

@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
+    # Hard ceiling on a session's total age, independent of activity — without
+    # this, a rotating refresh token (see auth/service.py) renews forever as
+    # long as the user keeps browsing, so a session could otherwise never end.
+    absolute_session_expire_days: int = 7
     password_reset_token_expire_minutes: int = 30
 
     # Comma-separated, not list[str] — pydantic-settings would try to JSON-parse

@@ -319,3 +319,17 @@ class CustomerService:
             raise NotFoundException("Supplier")
         await self.theme_repository.upsert(supplier_id, customer_id, primary_color, secondary_color)
         return supplier.name
+
+    async def get_customer_direct_theme(self, customer_id: uuid.UUID) -> Customer:
+        """This customer's OWN theme — plain columns on Customer, no supplier
+        involved. Distinct from the per-(supplier, customer) rows above."""
+        return await self.get_customer(customer_id)
+
+    async def set_customer_direct_theme(
+        self, customer_id: uuid.UUID, primary_color: str | None, secondary_color: str | None
+    ) -> Customer:
+        await self.get_customer(customer_id)
+        await self.repository.update(
+            customer_id, {"primary_color": primary_color, "secondary_color": secondary_color}
+        )
+        return await self.get_customer(customer_id)

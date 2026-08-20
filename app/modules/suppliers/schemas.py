@@ -10,6 +10,7 @@ class SupplierListItem(BaseModel):
     name: str
     username: str
     logo_url: str | None
+    profile_image_url: str | None
     email: str | None
     phone_number: str
     gst_number: str | None
@@ -33,6 +34,7 @@ class SupplierDetail(BaseModel):
     city: str
     web_link: str | None
     logo_url: str | None
+    profile_image_url: str | None
     username: str
     is_active: bool
     linked_customer_id: uuid.UUID | None
@@ -76,6 +78,7 @@ class SupplierCreateRequest(BaseModel):
     city: str = Field(min_length=1, max_length=100)
     web_link: str | None = None
     logo_url: str | None = None
+    profile_image_url: str | None = None
     username: str = Field(min_length=1, max_length=100)
     # Auto-provisions a linked Customer identity (own customer_code + emailed
     # temp password) so this supplier can also log into the Client Portal —
@@ -95,6 +98,7 @@ class SupplierUpdateRequest(BaseModel):
     city: str = Field(min_length=1, max_length=100)
     web_link: str | None = None
     logo_url: str | None = None
+    profile_image_url: str | None = None
     username: str = Field(min_length=1, max_length=100)
     password: str | None = Field(default=None, min_length=8)
     confirm_password: str | None = None

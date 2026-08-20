@@ -5,10 +5,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.security import create_access_token, generate_refresh_token, hash_token, verify_password
-from app.exceptions.http_exceptions import ForbiddenException, UnauthorizedException
+from app.exceptions.http_exceptions import ConflictException, ForbiddenException, UnauthorizedException
 from app.modules.auth.schemas import TokenPair
 from app.modules.customer_auth.repository import CustomerRefreshTokenRepository
-from app.modules.customer_auth.schemas import CustomerLoginResponse, CustomerProfile
+from app.modules.customer_auth.schemas import (
+    CustomerLoginResponse,
+    CustomerProfile,
+    UpdateCustomerMyProfileRequest,
+)
 from app.modules.customers.models import Customer
 from app.modules.customers.repository import CustomerRepository
 from app.modules.customers.suppliers_repository import CustomerSupplierRepository
@@ -27,6 +31,7 @@ def _to_profile(customer: Customer) -> CustomerProfile:
         email=customer.email,
         phone_number=customer.phone_number,
         profile_image_url=customer.profile_image_url,
+        logo_url=customer.logo_url,
     )
 
 
@@ -36,14 +41,21 @@ class CustomerAuthService:
         self.customer_repo = CustomerRepository(session)
         self.refresh_token_repo = CustomerRefreshTokenRepository(session)
         self.login_event_repo = CustomerLoginEventRepository(session)
-        self.supplier_repo = CustomerSupplierRepository(session)
+        self.customer_supplier_repo = CustomerSupplierRepository(session)
 
     async def _get_supplier_logos(self, customer_id: uuid.UUID) -> list[str]:
-        suppliers = await self.supplier_repo.get_suppliers(customer_id)
+        """Every supplier this customer BUYS FROM (Map Suppliers) that has a
+        logo set — this customer's OWN logo is customer.logo_url instead,
+        a plain column, not derived from anything."""
+        suppliers = await self.customer_supplier_repo.get_suppliers(customer_id)
         return [s.logo_url for s in suppliers if s.logo_url]
 
     async def _issue_token_pair(
-        self, customer: Customer, ip_address: str | None, user_agent: str | None
+        self,
+        customer: Customer,
+        ip_address: str | None,
+        user_agent: str | None,
+        session_started_at: datetime,
     ) -> TokenPair:
         # "type": "customer_access" (not "access"/"supplier_access") so a
         # customer token can never be accepted by get_current_user or
@@ -51,7 +63,9 @@ class CustomerAuthService:
         access_token = create_access_token(str(customer.id), extra={"type": "customer_access"})
         raw_refresh, refresh_hash = generate_refresh_token()
         expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
-        await self.refresh_token_repo.create(customer.id, refresh_hash, expires_at, ip_address, user_agent)
+        await self.refresh_token_repo.create(
+            customer.id, refresh_hash, expires_at, session_started_at, ip_address, user_agent
+        )
         return TokenPair(access_token=access_token, refresh_token=raw_refresh)
 
     async def login(
@@ -65,7 +79,9 @@ class CustomerAuthService:
 
         await self.customer_repo.update(customer.id, {"last_login_at": datetime.now(timezone.utc)})
         await self.login_event_repo.create(customer.id, ip_address)
-        tokens = await self._issue_token_pair(customer, ip_address, user_agent)
+        tokens = await self._issue_token_pair(
+            customer, ip_address, user_agent, session_started_at=datetime.now(timezone.utc)
+        )
         return CustomerLoginResponse(
             access_token=tokens.access_token,
             refresh_token=tokens.refresh_token,
@@ -87,7 +103,9 @@ class CustomerAuthService:
 
         await self.customer_repo.update(customer.id, {"last_login_at": datetime.now(timezone.utc)})
         await self.login_event_repo.create(customer.id, ip_address)
-        tokens = await self._issue_token_pair(customer, ip_address, user_agent)
+        tokens = await self._issue_token_pair(
+            customer, ip_address, user_agent, session_started_at=datetime.now(timezone.utc)
+        )
         return CustomerLoginResponse(
             access_token=tokens.access_token,
             refresh_token=tokens.refresh_token,
@@ -102,6 +120,10 @@ class CustomerAuthService:
         if stored is None:
             raise UnauthorizedException("Invalid or expired refresh token.")
 
+        session_age = datetime.now(timezone.utc) - stored.session_started_at
+        if session_age > timedelta(days=settings.absolute_session_expire_days):
+            raise UnauthorizedException("Session expired — please log in again.")
+
         if stored.revoked_at is not None:
             reused_within_grace_period = (
                 datetime.now(timezone.utc) - stored.revoked_at <= REFRESH_TOKEN_REUSE_GRACE_PERIOD
@@ -115,7 +137,9 @@ class CustomerAuthService:
         if customer is None or not customer.is_active:
             raise UnauthorizedException("Account is no longer active.")
 
-        return await self._issue_token_pair(customer, ip_address, user_agent)
+        return await self._issue_token_pair(
+            customer, ip_address, user_agent, session_started_at=stored.session_started_at
+        )
 
     async def logout(self, customer_id: uuid.UUID, raw_refresh_token: str) -> None:
         stored = await self.refresh_token_repo.get_valid_by_hash(hash_token(raw_refresh_token))
@@ -124,3 +148,15 @@ class CustomerAuthService:
         if stored.customer_id != customer_id:
             raise ForbiddenException("This refresh token does not belong to you.")
         await self.refresh_token_repo.revoke(stored)
+
+    async def update_my_profile(
+        self, customer: Customer, data: UpdateCustomerMyProfileRequest
+    ) -> Customer:
+        if await self.customer_repo.phone_number_taken(data.phone_number, exclude_id=customer.id):
+            raise ConflictException("This phone number is already in use.")
+        if data.email and await self.customer_repo.email_taken(data.email, exclude_id=customer.id):
+            raise ConflictException("This email is already in use.")
+        await self.customer_repo.update(customer.id, data.model_dump())
+        updated = await self.customer_repo.get_by_id(customer.id)
+        assert updated is not None
+        return updated
