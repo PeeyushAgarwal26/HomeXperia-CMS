@@ -68,6 +68,7 @@ class MeResponse(BaseModel):
     name: str
     username: str
     email: str | None
+    profile_image_url: str | None = None
     is_super_admin: bool
     permitted_module_keys: list[str]
 

@@ -5,7 +5,7 @@ Usage: python -m scripts.seed_reference_data
 
 import asyncio
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 import app.db.models  # noqa: F401 — registers every table so cross-model FKs resolve
 from app.db.session import AsyncSessionFactory
@@ -114,9 +114,6 @@ MODULE_TREE: list[tuple[str, str, str | None, bool]] = [
     ("master.product", "Product", "master", False),
     ("master.room_category", "Room Category", "master", False),
     ("orders", "Orders", None, True),
-    ("qr_code", "QR Code", None, False),
-    ("qr_generator", "QR Code Generator", "qr_code", True),
-    ("qr_generator.saved_list", "Generated QR Codes", "qr_code", True),
     ("upload_product", "Upload Product", None, False),
     ("upload_product.upload_files", "Upload Files", "upload_product", False),
     ("upload_product.log", "Log", "upload_product", False),
@@ -128,11 +125,14 @@ MODULE_TREE: list[tuple[str, str, str | None, bool]] = [
     ("logs.customer_login_history", "Customer Login History", "logs", False),
     ("logs.supplier_login_history", "Supplier Login History", "logs", True),
     ("logs.sub_admin_login_history", "Sub Admin Login History", "logs", True),
+    ("qr_code", "QR Code", None, False),
+    ("qr_generator", "QR Code Generator", "qr_code", True),
+    ("qr_generator.saved_list", "Generated QR Codes", "qr_code", True),
     ("notification", "Notification", None, False),
     ("notification.template", "Template", "notification", False),
     ("theme_configuration", "Theme Configuration", None, False),
-    ("visualizer_admin", "Cache Management", None, True),
     ("ai_credits", "AI Credits", None, True),
+    ("visualizer_admin", "Cache Management", None, True),
     ("app_feedback", "App Feedback", None, False),
     ("setting", "Setting", None, False),
     ("setting.change_password", "Change Password", "setting", True),
@@ -165,38 +165,51 @@ async def seed_cities(session) -> None:
 
 
 async def seed_module_catalog(session) -> None:
-    """Incremental: inserts only MODULE_TREE entries whose key isn't already
-    in the table, so a new module added to the tree later (e.g. ai_credits)
-    gets picked up on re-run without disturbing sort_order/ids of existing
-    rows or requiring a full re-seed."""
+    """Fully reconciles every module in MODULE_TREE to its current position
+    in that list — not insert-only. An earlier version of this function only
+    ever appended a brand-new key at `max(sort_order) + 1`, so a module
+    added to the *middle* of MODULE_TREE later (e.g. qr_code, ai_credits,
+    theme_configuration) ended up permanently stuck at the end of the
+    sidebar — its position reflected when it was first seeded, not where
+    MODULE_TREE actually declares it. Safe to re-run: `is_active` (the only
+    field anything else in the app ever mutates — see repository.py) is
+    never touched here; sort_order/parent_id/name/is_buildable are fully
+    code-owned and always reset to match MODULE_TREE exactly."""
     existing_rows = (await session.execute(select(Module.key, Module.id))).all()
     key_to_id: dict[str, object] = {row[0]: row[1] for row in existing_rows}
-    if not key_to_id:
-        next_sort_order = 0
-    else:
-        next_sort_order = (await session.scalar(select(func.max(Module.sort_order)))) + 1
 
     inserted = 0
-    for key, name, parent_key, is_buildable in MODULE_TREE:
+    for sort_order, (key, name, parent_key, is_buildable) in enumerate(MODULE_TREE):
         if key in key_to_id:
             continue
-        module = Module(
-            key=key,
-            name=name,
-            parent_id=key_to_id.get(parent_key) if parent_key else None,
-            sort_order=next_sort_order,
-            is_buildable=is_buildable,
-        )
+        module = Module(key=key, name=name, sort_order=sort_order, is_buildable=is_buildable)
         session.add(module)
         await session.flush()  # need module.id before it can be a parent
         key_to_id[key] = module.id
-        next_sort_order += 1
         inserted += 1
+
+    updated = 0
+    for sort_order, (key, name, parent_key, is_buildable) in enumerate(MODULE_TREE):
+        module = await session.get(Module, key_to_id[key])
+        parent_id = key_to_id.get(parent_key) if parent_key else None
+        if (
+            module.sort_order != sort_order
+            or module.parent_id != parent_id
+            or module.name != name
+            or module.is_buildable != is_buildable
+        ):
+            module.sort_order = sort_order
+            module.parent_id = parent_id
+            module.name = name
+            module.is_buildable = is_buildable
+            updated += 1
 
     if inserted:
         print(f"Seeded {inserted} new module catalog entries.")
-    else:
-        print("Module catalog already up to date — nothing to add.")
+    if updated:
+        print(f"Reconciled sort_order/parent/name for {updated} existing module catalog entries.")
+    if not inserted and not updated:
+        print("Module catalog already up to date — nothing to change.")
 
 
 async def main() -> None:

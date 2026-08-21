@@ -108,6 +108,7 @@ async def me(
             name=admin_user.name,
             username=admin_user.username,
             email=admin_user.email,
+            profile_image_url=admin_user.profile_image_url,
             is_super_admin=admin_user.is_super_admin,
             permitted_module_keys=permitted_module_keys,
         )
