@@ -14,10 +14,14 @@ class ProductRepository(BaseRepository[Product]):
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(Product, session)
 
-    async def get_by_supplier_and_bar_code(self, supplier_id: uuid.UUID, bar_code: str) -> Product | None:
-        """Bulk upload's natural key for "is this the same product" — lets a re-uploaded
-        sheet update rather than duplicate a product it already created."""
-        stmt = self._base_select().where(Product.supplier_id == supplier_id, Product.bar_code == bar_code)
+    async def get_by_bar_code(self, bar_code: str) -> Product | None:
+        """Bar codes are globally unique (see the model's ux_products_bar_code index),
+        not just within one supplier's catalog — so this is the one lookup both the
+        create/edit form's duplicate check and bulk upload's "is this the same
+        product" natural key need. Bulk upload additionally has to check the result's
+        own supplier_id itself (see product_uploads/service.py) to tell "re-uploading
+        my own product, update it" apart from "this code is already someone else's"."""
+        stmt = self._base_select().where(Product.bar_code == bar_code)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
 

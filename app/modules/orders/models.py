@@ -8,22 +8,24 @@ from app.db.base import Base, BaseModel
 
 
 class Cart(BaseModel):
-    """A customer's (retailer/showroom account's) in-progress cart, persisted
-    server-side for the storefront's "Lock Cart" step. Not read by, or
-    written to, order placement — the real /order/save-order call takes its
-    line items inline, independently of whatever's in here. One "open" cart
-    per customer at a time (see the partial unique index below); placing an
-    order never touches it."""
+    """A named cart a customer (retailer/showroom account) locks in on
+    behalf of a walk-in end customer who has no account of their own — the
+    storefront's "Lock Cart" step. There is no in-progress server-side cart
+    state before that: items are built up client-side and the whole cart
+    (name, whatsapp_no, items) is created in one shot when locked, so every
+    row here is already a complete, independent, named cart — a customer
+    can have any number of them (one per walk-in). Not read by, or written
+    to, order placement — the real /order/save-order call takes its line
+    items inline, independently of whatever's in here."""
 
     __tablename__ = "carts"
-    __table_args__ = (
-        Index("ux_carts_customer_open", "customer_id", unique=True, postgresql_where="status = 'open'"),
-    )
+    __table_args__ = (Index("ix_carts_customer_id", "customer_id"),)
 
     customer_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("customers.id", ondelete="CASCADE"), nullable=False
     )
-    status: Mapped[str] = mapped_column(String(20), nullable=False, default="open")
+    name: Mapped[str] = mapped_column(String(250), nullable=False)
+    whatsapp_no: Mapped[str] = mapped_column(String(20), nullable=False)
 
 
 class CartItem(Base):

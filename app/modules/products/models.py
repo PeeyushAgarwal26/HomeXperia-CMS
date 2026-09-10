@@ -20,7 +20,11 @@ class Product(BaseModel, SoftDeleteMixin):
     __table_args__ = (
         Index("ix_products_child_category_id", "child_category_id"),
         Index("ix_products_supplier_id", "supplier_id"),
-        Index("ix_products_bar_code", "bar_code"),
+        # Globally unique, not just within one supplier's own catalog - a bar code
+        # is a real-world product identifier, and two different suppliers claiming
+        # the same one is a data error, not a legitimate coincidence. Partial (only
+        # non-deleted rows) so a soft-deleted product's old bar code can be reused.
+        Index("ux_products_bar_code", "bar_code", unique=True, postgresql_where="deleted_at IS NULL"),
         Index("ix_products_is_active", "is_active"),
     )
 

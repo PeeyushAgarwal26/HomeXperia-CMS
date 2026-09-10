@@ -120,7 +120,7 @@ async def export_customers(
         ]
         for i, item in enumerate(items)
     ]
-    filename = f"CustomerList_{datetime.now().strftime('%d-%b-%Y_%H.%M')}.xlsx"
+    filename = f"CustomerList_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
     return build_xlsx_response(filename, headers, rows)
 
 
@@ -135,7 +135,7 @@ async def export_customer_supplier_mapping(
         [i + 1, customer_name, customer_code, supplier_name]
         for i, (customer_name, customer_code, supplier_name) in enumerate(mappings)
     ]
-    filename = f"CustomerSupplierMapping_{datetime.now().strftime('%d-%b-%Y_%H.%M')}.xlsx"
+    filename = f"CustomerSupplierMapping_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
     return build_xlsx_response(filename, headers, rows)
 
 
@@ -155,12 +155,8 @@ async def create_customer(
     current_admin: AdminUser = Depends(_require_customer_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    customer, temp_password, linked_supplier = await CustomerService(session).create(
-        body, created_by=current_admin.id
-    )
-    data = CustomerCreateResponse(
-        **_to_detail(customer).model_dump(), temporary_password=temp_password, linked_supplier=linked_supplier
-    )
+    customer, linked_supplier = await CustomerService(session).create(body, created_by=current_admin.id)
+    data = CustomerCreateResponse(**_to_detail(customer).model_dump(), linked_supplier=linked_supplier)
     return controller.success(data=data, message="Customer created successfully.")
 
 
@@ -197,9 +193,9 @@ async def promote_customer_to_supplier(
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
     data = await CustomerService(session).promote_to_supplier(
-        customer_id, body.username, body.state_code, body.city, created_by=current_admin.id
+        customer_id, body.username, body.password, body.state_code, body.city, created_by=current_admin.id
     )
-    return controller.success(data=data, message="Supplier account created and credentials emailed.")
+    return controller.success(data=data, message="Supplier account created.")
 
 
 @router.patch("/{customer_id}/status", response_model=APIResponse[dict])

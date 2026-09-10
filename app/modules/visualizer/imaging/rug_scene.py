@@ -156,7 +156,7 @@ def detect_floor_quad(
 
     left_segs, right_segs = [], []
     if lines_full is not None:
-        for x1_, y1_, x2_, y2_ in lines_full[:, 0]:
+        for x1_, y1_, x2_, y2_ in lines_full.reshape(-1, 4):
             y1g = y1_ + lower_y0
             y2g = y2_ + lower_y0
             dx = float(x2_ - x1_)
@@ -210,7 +210,7 @@ def detect_floor_quad(
 
         coords = cv2.findNonZero(mask_proc)
         if coords is not None:
-            min_y = int(np.min(coords[:, 0, 1]))
+            min_y = int(np.min(coords.reshape(-1, 2)[:, 1]))
             offset = int(H * 0.02)
             floor_top_y = max(int(H * 0.20), min_y - offset)
     else:
@@ -237,7 +237,7 @@ def detect_floor_quad(
         if lines_ref is not None:
             floor_top_y_init = floor_top_y
             best_score, best_y = 0.0, floor_top_y
-            for x1_, y1_, x2_, y2_ in lines_ref[:, 0]:
+            for x1_, y1_, x2_, y2_ in lines_ref.reshape(-1, 4):
                 if abs(y2_ - y1_) > 14:
                     continue
                 length = math.hypot(x2_ - x1_, y2_ - y1_)

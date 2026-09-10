@@ -32,8 +32,6 @@ class BalanceSheetRow(BaseModel):
     period_label: str
     credits_added: int | None
     credits_carried_forward: int | None
-    mask_generated_used: int
-    curtain_applied_used: int | None
     total_used: int
     credits_purchased: int
     balance_as_of: int
@@ -59,7 +57,6 @@ class BalanceSheetResponse(BaseModel):
     account_id: uuid.UUID
     account_type: AccountType
     account_name: str
-    shows_curtain_column: bool
     rows: list[BalanceSheetRow]
     pipeline_stats: AiPipelineStats | None
 

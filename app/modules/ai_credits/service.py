@@ -2,7 +2,6 @@ import logging
 import uuid
 from datetime import date
 
-from sqlalchemy import exists, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.exceptions.http_exceptions import NotFoundException
@@ -28,9 +27,7 @@ from app.modules.ai_credits.schemas import (
     TopUpRequest,
     TrendPoint,
 )
-from app.modules.categories.models import ChildCategory, ParentCategory
 from app.modules.customers.models import Customer
-from app.modules.products.models import Product
 from app.modules.suppliers.models import Supplier
 from app.modules.visualizer.repository import UsageLogRepository
 
@@ -130,17 +127,22 @@ class AiCreditService:
             return own_account
         return None
 
-    async def _supplier_has_curtain_products(self, supplier_id: uuid.UUID) -> bool:
-        stmt = select(
-            exists().where(
-                Product.supplier_id == supplier_id,
-                Product.deleted_at.is_(None),
-                Product.child_category_id == ChildCategory.id,
-                ChildCategory.parent_category_id == ParentCategory.id,
-                (ChildCategory.name.ilike("%curtain%") | ParentCategory.name.ilike("%curtain%")),
-            )
-        )
-        return bool(await self.session.scalar(stmt))
+    async def resolve_customer_account(self, customer_id: uuid.UUID) -> AccountKey:
+        """Which AccountKey a Customer's AI Credits admin screen (balance
+        sheet, audit log, settings, top-up) actually reads and writes -
+        the linked Supplier's account when one exists, so it shows the exact
+        same numbers as opening that Supplier directly (mirrors
+        resolve_billing_account, since real usage already bills there; the
+        two accounts would otherwise silently drift apart). Unlike
+        resolve_billing_account, this always resolves to *some* account
+        (never None) even before any settings exist yet, so a plain,
+        unlinked customer can still be configured for the first time."""
+        customer = await self.session.get(Customer, customer_id)
+        if customer is None:
+            raise NotFoundException("Customer")
+        if customer.linked_supplier_id is not None:
+            return AccountKey.for_supplier(customer.linked_supplier_id)
+        return AccountKey.for_customer(customer_id)
 
     # ---- charging (called from VisualizerService hooks) ----
 
@@ -267,9 +269,6 @@ class AiCreditService:
 
     async def compute_balance_sheet(self, account: AccountKey) -> BalanceSheetResponse:
         entity = await self._get_owner_entity(account)
-        shows_curtain_column = (
-            await self._supplier_has_curtain_products(account.owner_id) if account.owner_type == "supplier" else False
-        )
 
         today = date.today()
         period_start = _month_start(today)
@@ -284,8 +283,6 @@ class AiCreditService:
                     period_label="Previous Month",
                     credits_added=prev_entry.credits_allocated,
                     credits_carried_forward=prev_entry.credits_carried_forward,
-                    mask_generated_used=prev_entry.credits_used_mask_generated,
-                    curtain_applied_used=prev_entry.credits_used_curtain_applied if shows_curtain_column else None,
                     total_used=prev_entry.credits_used_mask_generated + prev_entry.credits_used_curtain_applied,
                     credits_purchased=prev_entry.credits_purchased,
                     balance_as_of=prev_entry.closing_balance,
@@ -297,6 +294,9 @@ class AiCreditService:
         credits_added_mtd = current_allocation_batch.amount_granted if current_allocation_batch else 0
         carried_forward_mtd = prev_entry.closing_balance if prev_entry is not None else 0
         purchased_mtd = await self.batch_repo.sum_topups_in_range(account, period_start, _next_month_start(period_start))
+        # Every credit-charging action (rugs, tiles, wall color/paint, wallpaper,
+        # curtains, etc.) rolls up into this one Total Used figure - there's no
+        # per-product-category split shown here, just what was spent overall.
         usage_mtd = await self.tx_repo.sum_used_by_category(account, since=period_start)
         total_mtd = usage_mtd["mask_generated"] + usage_mtd["curtain_applied"]
         rows.append(
@@ -304,8 +304,6 @@ class AiCreditService:
                 period_label="Month Till Date",
                 credits_added=credits_added_mtd,
                 credits_carried_forward=carried_forward_mtd,
-                mask_generated_used=usage_mtd["mask_generated"],
-                curtain_applied_used=usage_mtd["curtain_applied"] if shows_curtain_column else None,
                 total_used=total_mtd,
                 credits_purchased=purchased_mtd,
                 balance_as_of=current_balance,
@@ -319,8 +317,6 @@ class AiCreditService:
                 period_label="Today",
                 credits_added=0,
                 credits_carried_forward=None,
-                mask_generated_used=usage_today["mask_generated"],
-                curtain_applied_used=usage_today["curtain_applied"] if shows_curtain_column else None,
                 total_used=total_today,
                 credits_purchased=0,
                 balance_as_of=current_balance,
@@ -331,7 +327,6 @@ class AiCreditService:
             account_id=account.owner_id,
             account_type=account.owner_type,
             account_name=self._entity_name(entity),
-            shows_curtain_column=shows_curtain_column,
             rows=rows,
             pipeline_stats=await self.get_pipeline_stats(account, entity),
         )

@@ -89,7 +89,7 @@ async def download_my_template(
     storage: StorageInterface = Depends(get_storage),
 ):
     content = await ProductUploadService(session, storage).build_template(supplier.id)
-    filename = f"ProductUploadFormat_{datetime.now().strftime('%d-%b-%Y_%H.%M')}.xlsx"
+    filename = f"ProductUploadFormat_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
     return StreamingResponse(
         BytesIO(content),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

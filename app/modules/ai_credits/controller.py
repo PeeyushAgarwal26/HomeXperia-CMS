@@ -92,8 +92,14 @@ async def get_customer_balance_sheet(
 ) -> APIResponse:
     """A plain customer's own direct AI credit account — e.g. a retailer who
     never supplies anything but still uses the visualizer. No promotion to
-    Supplier required; see AiCreditService.resolve_billing_account."""
-    data = await AiCreditService(session).compute_balance_sheet(AccountKey.for_customer(customer_id))
+    Supplier required. But if this customer HAS been promoted (linked_supplier_id
+    set), this reads the linked Supplier's account instead — see
+    AiCreditService.resolve_customer_account — so it shows the exact same
+    numbers as opening that Supplier directly, matching real usage, which
+    already bills the linked Supplier (resolve_billing_account)."""
+    service = AiCreditService(session)
+    account = await service.resolve_customer_account(customer_id)
+    data = await service.compute_balance_sheet(account)
     return controller.success(data=data)
 
 
@@ -104,9 +110,9 @@ async def get_customer_audit_log(
     _: AdminUser = Depends(_require_ai_credits_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    data, total = await AiCreditService(session).get_audit_log(
-        AccountKey.for_customer(customer_id), pagination.offset, pagination.limit
-    )
+    service = AiCreditService(session)
+    account = await service.resolve_customer_account(customer_id)
+    data, total = await service.get_audit_log(account, pagination.offset, pagination.limit)
     return controller.paginated(data=data, total=total, page=pagination.page, page_size=pagination.page_size)
 
 
@@ -117,9 +123,9 @@ async def set_customer_credit_settings(
     current_admin: AdminUser = Depends(_require_ai_credits_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    data = await AiCreditService(session).create_or_update_settings(
-        AccountKey.for_customer(customer_id), body, created_by=current_admin.id
-    )
+    service = AiCreditService(session)
+    account = await service.resolve_customer_account(customer_id)
+    data = await service.create_or_update_settings(account, body, created_by=current_admin.id)
     return controller.success(data=data, message="Customer AI credit settings saved.")
 
 
@@ -130,7 +136,9 @@ async def add_customer_topup(
     current_admin: AdminUser = Depends(_require_ai_credits_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    await AiCreditService(session).add_topup(AccountKey.for_customer(customer_id), body, created_by=current_admin.id)
+    service = AiCreditService(session)
+    account = await service.resolve_customer_account(customer_id)
+    await service.add_topup(account, body, created_by=current_admin.id)
     return controller.success(message="Credits added.")
 
 

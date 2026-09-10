@@ -89,7 +89,9 @@ def _hough_segments_on_padded_mask(thresh_bin, pad):
     segs = []
     if lines is None:
         return segs
-    for x1, y1, x2, y2 in lines[:, 0]:
+    # cv2.HoughLinesP doesn't reliably return the documented (N,1,4) shape -
+    # reshape defensively rather than assume [:, 0] unpacks.
+    for x1, y1, x2, y2 in lines.reshape(-1, 4):
         segs.append(
             (
                 float(x1 - pad),
@@ -368,8 +370,10 @@ def get_vanishing_point_trapezoid(mask_img: np.ndarray) -> np.ndarray | None:
     right_lines = []
 
     if lines is not None:
-        for line in lines:
-            x1, y1, x2, y2 = line[0]
+        # cv2.HoughLinesP doesn't reliably return the documented (N,1,4)
+        # shape - reshape defensively rather than assume line[0] indexes.
+        for line in lines.reshape(-1, 4):
+            x1, y1, x2, y2 = line
             if x2 - x1 == 0:
                 continue
             slope = (y2 - y1) / (x2 - x1)

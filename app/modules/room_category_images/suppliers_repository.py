@@ -18,6 +18,27 @@ class RoomCategoryImageSupplierRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_image_ids_mapped_to_any(
+        self, room_category_image_ids: list[uuid.UUID], supplier_ids: list[uuid.UUID]
+    ) -> set[uuid.UUID]:
+        """Which of these images has at least one of these suppliers mapped
+        to it — used to scope a customer's demo-room images down to only
+        the ones their own supplier(s) actually offer. An image with no
+        Map Suppliers rows at all matches nothing here (by design — see
+        RoomCategoryService.list_active_for_customer)."""
+        if not room_category_image_ids or not supplier_ids:
+            return set()
+        stmt = (
+            select(RoomCategoryImageSupplier.room_category_image_id)
+            .where(
+                RoomCategoryImageSupplier.room_category_image_id.in_(room_category_image_ids),
+                RoomCategoryImageSupplier.supplier_id.in_(supplier_ids),
+            )
+            .distinct()
+        )
+        result = await self.session.execute(stmt)
+        return set(result.scalars().all())
+
     async def get_supplier_names_map(
         self, room_category_image_ids: list[uuid.UUID]
     ) -> dict[uuid.UUID, list[str]]:

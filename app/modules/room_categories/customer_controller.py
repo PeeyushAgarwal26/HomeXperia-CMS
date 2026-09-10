@@ -18,5 +18,5 @@ async def list_room_categories_for_customer(
     customer: Customer | None = Depends(get_current_customer_optional),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    data = await RoomCategoryService(session).list_active_for_customer()
+    data = await RoomCategoryService(session).list_active_for_customer(customer)
     return controller.success(data=data)

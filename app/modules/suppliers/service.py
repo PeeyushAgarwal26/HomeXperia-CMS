@@ -1,10 +1,10 @@
-import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.linked_profile_sync import shared_profile_fields
 from app.common.pagination import PaginationParams, SortParams
-from app.core.security import generate_temp_password, hash_password
+from app.core.security import hash_password
 from app.exceptions.http_exceptions import (
     BadRequestException,
     ConflictException,
@@ -27,9 +27,6 @@ from app.modules.suppliers.schemas import (
     SupplierCreateRequest,
     SupplierUpdateRequest,
 )
-from app.services.email import send_email
-
-logger = logging.getLogger(__name__)
 
 
 class SupplierService:
@@ -84,35 +81,21 @@ class SupplierService:
 
     async def create(
         self, data: SupplierCreateRequest, created_by: uuid.UUID
-    ) -> tuple[Supplier, str, LinkedAccountCreatedResponse | None]:
+    ) -> tuple[Supplier, LinkedAccountCreatedResponse | None]:
         await self._check_uniqueness(data.username, data.phone_number)
 
-        temp_password = generate_temp_password()
-        payload = data.model_dump(exclude={"also_create_customer"})
-        payload["password_hash"] = hash_password(temp_password)
+        payload = data.model_dump(exclude={"password", "confirm_password", "also_create_customer"})
+        payload["password_hash"] = hash_password(data.password)
         payload["created_by"] = created_by
 
         supplier = await self.repository.create(payload)
 
-        if supplier.email:
-            try:
-                await send_email(
-                    to=supplier.email,
-                    subject="Your HomeXperia Supplier Portal account",
-                    body_html=(
-                        f"<p>A Supplier Portal account has been created for you.</p>"
-                        f"<p>Username: <strong>{supplier.username}</strong><br>"
-                        f"Temporary Password: <strong>{temp_password}</strong></p>"
-                        f"<p>Please log in and change your password.</p>"
-                    ),
-                )
-            except Exception:
-                logger.exception("supplier_credentials_email_failed", extra={"supplier_id": str(supplier.id)})
-
         linked_customer = (
-            await self.create_linked_customer(supplier.id, created_by) if data.also_create_customer else None
+            await self.create_linked_customer(supplier.id, data.password, created_by)
+            if data.also_create_customer
+            else None
         )
-        return await self.get_supplier(supplier.id), temp_password, linked_customer
+        return await self.get_supplier(supplier.id), linked_customer
 
     async def _generate_unique_customer_code(self, seed: str) -> str:
         base = "".join(ch for ch in seed.lower() if ch.isalnum()) or "customer"
@@ -124,18 +107,18 @@ class SupplierService:
         return candidate
 
     async def create_linked_customer(
-        self, supplier_id: uuid.UUID, created_by: uuid.UUID
+        self, supplier_id: uuid.UUID, password: str, created_by: uuid.UUID
     ) -> LinkedAccountCreatedResponse:
         """Auto-provisions this supplier's own Customer identity — a fully
-        independent account (own customer_code, own random temp password)
-        carrying over the supplier's shared fields. Linked only by FK; never
-        shares a password with the Supplier row it came from."""
+        independent account (own customer_code, own password) carrying over
+        the supplier's shared fields. Linked only by FK; never shares a
+        password with the Supplier row it came from unless the caller
+        explicitly passes the same one in."""
         supplier = await self.get_supplier(supplier_id)
         if supplier.linked_customer_id is not None:
             raise ConflictException("This supplier already has a linked customer account.")
 
         customer_code = await self._generate_unique_customer_code(supplier.username)
-        temp_password = generate_temp_password()
         customer = await self.customer_repository.create(
             {
                 "name": supplier.name,
@@ -146,8 +129,10 @@ class SupplierService:
                 "pin_code": supplier.pin_code,
                 "state_code": supplier.state_code,
                 "city": supplier.city,
+                "logo_url": supplier.logo_url,
+                "profile_image_url": supplier.profile_image_url,
                 "customer_code": customer_code,
-                "password_hash": hash_password(temp_password),
+                "password_hash": hash_password(password),
                 "created_by": created_by,
                 "linked_supplier_id": supplier.id,
             }
@@ -155,30 +140,10 @@ class SupplierService:
         await self.repository.update(supplier_id, {"linked_customer_id": customer.id})
         await self.customer_supplier_repository.replace(customer.id, [supplier_id], mapped_by=created_by)
 
-        if supplier.email:
-            try:
-                await send_email(
-                    to=supplier.email,
-                    subject="Your HomeXperia Client Portal account",
-                    body_html=(
-                        f"<p>A Client Portal account has been created for you.</p>"
-                        f"<p>Customer Code: <strong>{customer_code}</strong><br>"
-                        f"Temporary Password: <strong>{temp_password}</strong></p>"
-                        f"<p>Please log in and change your password.</p>"
-                    ),
-                )
-            except Exception:
-                logger.exception("linked_customer_credentials_email_failed", extra={"supplier_id": str(supplier_id)})
-
-        return LinkedAccountCreatedResponse(
-            linked_id=customer.id,
-            login_identifier=customer_code,
-            email_sent_to=supplier.email,
-            temporary_password=temp_password,
-        )
+        return LinkedAccountCreatedResponse(linked_id=customer.id, login_identifier=customer_code)
 
     async def update(self, supplier_id: uuid.UUID, data: SupplierUpdateRequest) -> Supplier:
-        await self.get_supplier(supplier_id)
+        supplier = await self.get_supplier(supplier_id)
         await self._check_uniqueness(data.username, data.phone_number, exclude_id=supplier_id)
 
         payload = data.model_dump(exclude={"password", "confirm_password"})
@@ -186,6 +151,8 @@ class SupplierService:
             payload["password_hash"] = hash_password(data.password)
 
         await self.repository.update(supplier_id, payload)
+        if supplier.linked_customer_id is not None:
+            await self.customer_repository.update(supplier.linked_customer_id, shared_profile_fields(payload))
         return await self.get_supplier(supplier_id)
 
     async def delete(self, supplier_id: uuid.UUID) -> None:

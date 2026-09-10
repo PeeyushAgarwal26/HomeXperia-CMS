@@ -10,10 +10,12 @@ from app.modules.orders.models import Order
 from app.modules.orders.pdf import generate_invoice_pdf
 from app.modules.orders.repository import CartRepository, OrderRepository
 from app.modules.orders.schemas import (
+    CartCreateRequest,
     CartDetail,
-    CartItemDeleteRequest,
     CartItemDetail,
+    CartItemRemoveRequest,
     CartItemUpsertRequest,
+    CartSummary,
     MyOrderListItem,
     OrderCreateRequest,
     OrderCreateResponse,
@@ -33,14 +35,41 @@ class OrderService:
 
     # ---- cart ----
 
-    async def get_or_create_cart(self, customer_id: uuid.UUID):
-        cart = await self.cart_repo.get_open_cart(customer_id)
+    async def _require_cart(self, customer_id: uuid.UUID, cart_id: uuid.UUID):
+        cart = await self.cart_repo.get_cart(customer_id, cart_id)
         if cart is None:
-            cart = await self.cart_repo.create_open_cart(customer_id)
+            raise NotFoundException("Cart")
         return cart
 
-    async def get_cart_detail(self, customer_id: uuid.UUID) -> CartDetail:
-        cart = await self.get_or_create_cart(customer_id)
+    async def create_cart(self, customer_id: uuid.UUID, data: CartCreateRequest) -> CartDetail:
+        for line in data.items:
+            product = await self.product_repo.get_by_id(line.product_id)
+            if product is None or not product.is_active:
+                raise BadRequestException(f"Product {line.product_id} not found or unavailable.")
+        cart = await self.cart_repo.create_cart(customer_id, data.name, data.whatsapp_no)
+        for line in data.items:
+            await self.cart_repo.upsert_item(cart.id, line.product_id, line.quantity, line.uom.upper())
+        return await self.get_cart_detail(customer_id, cart.id)
+
+    async def list_carts(
+        self, customer_id: uuid.UUID, offset: int, limit: int | None
+    ) -> tuple[list[CartSummary], int]:
+        rows, total = await self.cart_repo.list_carts(customer_id, offset, limit)
+        items = [
+            CartSummary(
+                id=cart.id,
+                name=cart.name,
+                whatsapp_no=cart.whatsapp_no,
+                item_count=item_count,
+                total_amount=total_amount,
+                created_at=cart.created_at,
+            )
+            for cart, item_count, total_amount in rows
+        ]
+        return items, total
+
+    async def get_cart_detail(self, customer_id: uuid.UUID, cart_id: uuid.UUID) -> CartDetail:
+        cart = await self._require_cart(customer_id, cart_id)
         rows = await self.cart_repo.get_items_with_products(cart.id)
         items: list[CartItemDetail] = []
         total = 0.0
@@ -60,23 +89,24 @@ class OrderService:
                     amount=amount,
                 )
             )
-        return CartDetail(id=cart.id, status=cart.status, items=items, total_amount=total)
+        return CartDetail(id=cart.id, name=cart.name, whatsapp_no=cart.whatsapp_no, items=items, total_amount=total)
+
+    async def delete_cart(self, customer_id: uuid.UUID, cart_id: uuid.UUID) -> None:
+        await self._require_cart(customer_id, cart_id)
+        await self.cart_repo.delete_cart(cart_id)
 
     async def upsert_cart_item(self, customer_id: uuid.UUID, data: CartItemUpsertRequest) -> CartDetail:
+        await self._require_cart(customer_id, data.cart_id)
         product = await self.product_repo.get_by_id(data.product_id)
         if product is None or not product.is_active:
             raise BadRequestException("Product not found or unavailable.")
-        cart = await self.get_or_create_cart(customer_id)
-        await self.cart_repo.upsert_item(cart.id, data.product_id, data.quantity, data.uom.upper())
-        return await self.get_cart_detail(customer_id)
+        await self.cart_repo.upsert_item(data.cart_id, data.product_id, data.quantity, data.uom.upper())
+        return await self.get_cart_detail(customer_id, data.cart_id)
 
-    async def delete_cart_item(self, customer_id: uuid.UUID, data: CartItemDeleteRequest) -> CartDetail:
-        cart = await self.get_or_create_cart(customer_id)
-        if data.product_id is not None:
-            await self.cart_repo.delete_item(cart.id, data.product_id)
-        else:
-            await self.cart_repo.clear_items(cart.id)
-        return await self.get_cart_detail(customer_id)
+    async def remove_cart_item(self, customer_id: uuid.UUID, data: CartItemRemoveRequest) -> CartDetail:
+        await self._require_cart(customer_id, data.cart_id)
+        await self.cart_repo.delete_item(data.cart_id, data.product_id)
+        return await self.get_cart_detail(customer_id, data.cart_id)
 
     # ---- order placement ----
 

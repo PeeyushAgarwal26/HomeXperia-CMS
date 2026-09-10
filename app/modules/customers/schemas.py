@@ -44,28 +44,17 @@ class CustomerDetail(BaseModel):
 class LinkedAccountCreatedResponse(BaseModel):
     linked_id: uuid.UUID
     login_identifier: str
-    email_sent_to: str | None
-    # Same "shown once, until SMTP is live" rationale as CustomerCreateResponse.
-    temporary_password: str
 
 
 class CustomerCreateResponse(CustomerDetail):
-    # SMTP isn't configured yet — until it is, the admin UI shows this once,
-    # right after creation, so the temp password can be shared manually.
-    # Never persisted or returned again after this response.
-    temporary_password: str
     # Set only when also_create_supplier was checked — surfaces that linked
-    # account's own credentials too, since its email would otherwise be the
-    # only place they ever appeared.
+    # account's login identifier too, since it isn't shown anywhere else.
     linked_supplier: LinkedAccountCreatedResponse | None = None
 
 
 class CustomerCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=250)
     date_of_start: date | None = None
-    # Optional — if left blank, the auto-generated temp password is only
-    # ever shown once in the admin UI (see CustomerCreateResponse) instead
-    # of also being emailed.
     email: EmailStr | None = None
     phone_number: str = Field(min_length=10, max_length=20)
     gst_number: str | None = None
@@ -77,12 +66,20 @@ class CustomerCreateRequest(BaseModel):
     logo_url: str | None = None
     device_limit: int = Field(ge=1, le=100)
     customer_code: str = Field(min_length=1, max_length=100)
-    # Auto-provisions a linked Supplier identity (own username + emailed temp
-    # password) so this customer can also log into the Supplier Portal — see
-    # CustomerService.promote_to_supplier. supplier_username is required only
-    # when this is set.
+    password: str = Field(min_length=8)
+    confirm_password: str
+    # Auto-provisions a linked Supplier identity (own username, same password
+    # as this account) so this customer can also log into the Supplier Portal
+    # — see CustomerService.promote_to_supplier. supplier_username is
+    # required only when this is set.
     also_create_supplier: bool = False
     supplier_username: str | None = Field(default=None, min_length=1, max_length=100)
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "CustomerCreateRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match.")
+        return self
 
     @model_validator(mode="after")
     def supplier_username_required_if_promoting(self) -> "CustomerCreateRequest":
@@ -97,6 +94,14 @@ class PromoteToSupplierRequest(BaseModel):
     # Supplier requires both, Customer allows either to be null.
     state_code: str | None = Field(default=None, min_length=1, max_length=10)
     city: str | None = Field(default=None, min_length=1, max_length=100)
+    password: str = Field(min_length=8)
+    confirm_password: str
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "PromoteToSupplierRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match.")
+        return self
 
 
 class CustomerUpdateRequest(BaseModel):

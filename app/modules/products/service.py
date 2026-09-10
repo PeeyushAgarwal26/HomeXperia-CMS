@@ -190,11 +190,9 @@ class ProductService:
             raise NotFoundException("Child category")
         if await self.supplier_repository.get_by_id(data.supplier_id) is None:
             raise NotFoundException("Supplier")
-        existing = await self.repository.get_by_supplier_and_bar_code(data.supplier_id, data.bar_code)
+        existing = await self.repository.get_by_bar_code(data.bar_code)
         if existing is not None and existing.id != exclude_id:
-            raise ConflictException(
-                f'A product with Bar Code "{data.bar_code}" already exists for this supplier.'
-            )
+            raise ConflictException(f'A product with Bar Code "{data.bar_code}" already exists.')
         unique_ids = list(dict.fromkeys(data.filter_value_ids))
         if not unique_ids:
             return

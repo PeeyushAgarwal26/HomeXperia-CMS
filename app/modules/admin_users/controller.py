@@ -15,7 +15,6 @@ from app.modules.admin_users.schemas import (
     AssignAccessResponse,
     StatusUpdateRequest,
     SubAdminCreateRequest,
-    SubAdminCreateResponse,
     SubAdminDetail,
     SubAdminListItem,
     SubAdminUpdateRequest,
@@ -84,15 +83,14 @@ async def get_sub_admin(
     return controller.success(data=_to_detail(admin_user))
 
 
-@router.post("", response_model=APIResponse[SubAdminCreateResponse], status_code=201)
+@router.post("", response_model=APIResponse[SubAdminDetail], status_code=201)
 async def create_sub_admin(
     body: SubAdminCreateRequest,
     current_admin: AdminUser = Depends(_require_sub_admin_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    admin_user, temp_password = await AdminUserService(session).create(body, created_by=current_admin.id)
-    data = SubAdminCreateResponse(**_to_detail(admin_user).model_dump(), temporary_password=temp_password)
-    return controller.success(data=data, message="Sub-admin created successfully.")
+    admin_user = await AdminUserService(session).create(body, created_by=current_admin.id)
+    return controller.success(data=_to_detail(admin_user), message="Sub-admin created successfully.")
 
 
 @router.put("/{admin_user_id}", response_model=APIResponse[SubAdminDetail])

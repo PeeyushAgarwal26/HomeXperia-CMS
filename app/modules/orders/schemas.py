@@ -6,16 +6,33 @@ from pydantic import BaseModel, ConfigDict, Field
 # ---- cart (customer-facing) ----
 
 
-class CartItemUpsertRequest(BaseModel):
+class CartItemCreateRequest(BaseModel):
     product_id: uuid.UUID
     quantity: int = Field(gt=0)
     uom: str = Field(min_length=1, max_length=50)
 
 
-class CartItemDeleteRequest(BaseModel):
-    """Omitting product_id clears every item in the cart."""
+class CartCreateRequest(BaseModel):
+    """One shot: creates a new named cart and its items together — matches
+    the real client-frontend's "Lock Cart" step, which only ever has a
+    client-side (sessionStorage) working cart to hand over at this point,
+    never an existing server-side cart id."""
 
-    product_id: uuid.UUID | None = None
+    name: str = Field(min_length=1, max_length=250)
+    whatsapp_no: str = Field(min_length=1, max_length=20)
+    items: list[CartItemCreateRequest] = Field(min_length=1)
+
+
+class CartItemUpsertRequest(BaseModel):
+    cart_id: uuid.UUID
+    product_id: uuid.UUID
+    quantity: int = Field(gt=0)
+    uom: str = Field(min_length=1, max_length=50)
+
+
+class CartItemRemoveRequest(BaseModel):
+    cart_id: uuid.UUID
+    product_id: uuid.UUID
 
 
 class CartItemDetail(BaseModel):
@@ -31,9 +48,22 @@ class CartItemDetail(BaseModel):
 
 class CartDetail(BaseModel):
     id: uuid.UUID
-    status: str
+    name: str
+    whatsapp_no: str
     items: list[CartItemDetail]
     total_amount: float
+
+
+class CartSummary(BaseModel):
+    """Lighter-weight than CartDetail (no per-item product lookups) — for
+    the "Locked" tab's list of a customer's carts."""
+
+    id: uuid.UUID
+    name: str
+    whatsapp_no: str
+    item_count: int
+    total_amount: float
+    created_at: datetime
 
 
 # ---- order placement (customer-facing) ----

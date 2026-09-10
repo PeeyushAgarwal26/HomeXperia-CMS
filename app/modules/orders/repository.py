@@ -14,15 +14,47 @@ class CartRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def get_open_cart(self, customer_id: uuid.UUID) -> Cart | None:
-        stmt = select(Cart).where(Cart.customer_id == customer_id, Cart.status == "open")
-        return (await self.session.execute(stmt)).scalar_one_or_none()
-
-    async def create_open_cart(self, customer_id: uuid.UUID) -> Cart:
-        cart = Cart(customer_id=customer_id, status="open")
+    async def create_cart(self, customer_id: uuid.UUID, name: str, whatsapp_no: str) -> Cart:
+        cart = Cart(customer_id=customer_id, name=name, whatsapp_no=whatsapp_no)
         self.session.add(cart)
         await self.session.flush()
         return cart
+
+    async def get_cart(self, customer_id: uuid.UUID, cart_id: uuid.UUID) -> Cart | None:
+        """Scoped to customer_id so one customer can never read or mutate
+        another's locked cart by guessing/reusing an id."""
+        stmt = select(Cart).where(Cart.id == cart_id, Cart.customer_id == customer_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def list_carts(
+        self, customer_id: uuid.UUID, offset: int, limit: int | None
+    ) -> tuple[list[tuple[Cart, int, float]], int]:
+        item_count = (
+            select(func.count(CartItem.id))
+            .where(CartItem.cart_id == Cart.id)
+            .correlate(Cart)
+            .scalar_subquery()
+        )
+        total_amount = (
+            select(func.coalesce(func.sum(Product.rate * CartItem.quantity), 0))
+            .select_from(CartItem)
+            .join(Product, Product.id == CartItem.product_id)
+            .where(CartItem.cart_id == Cart.id)
+            .correlate(Cart)
+            .scalar_subquery()
+        )
+        stmt = select(Cart, item_count, total_amount).where(Cart.customer_id == customer_id)
+        total = await self.session.scalar(
+            select(func.count()).select_from(select(Cart.id).where(Cart.customer_id == customer_id).subquery())
+        ) or 0
+        stmt = stmt.order_by(Cart.created_at.desc()).offset(offset)
+        if limit is not None:
+            stmt = stmt.limit(limit)
+        rows = (await self.session.execute(stmt)).all()
+        return [(row[0], row[1], float(row[2])) for row in rows], total
+
+    async def delete_cart(self, cart_id: uuid.UUID) -> None:
+        await self.session.execute(delete(Cart).where(Cart.id == cart_id))
 
     async def get_items_with_products(self, cart_id: uuid.UUID) -> list[tuple[CartItem, Product]]:
         stmt = (
@@ -49,9 +81,6 @@ class CartRepository:
         await self.session.execute(
             delete(CartItem).where(CartItem.cart_id == cart_id, CartItem.product_id == product_id)
         )
-
-    async def clear_items(self, cart_id: uuid.UUID) -> None:
-        await self.session.execute(delete(CartItem).where(CartItem.cart_id == cart_id))
 
 
 class OrderRepository(BaseRepository[Order]):

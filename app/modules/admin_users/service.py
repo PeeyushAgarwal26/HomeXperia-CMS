@@ -1,10 +1,9 @@
-import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.common.pagination import PaginationParams, SortParams
-from app.core.security import generate_temp_password, hash_password
+from app.core.security import hash_password
 from app.exceptions.http_exceptions import (
     BadRequestException,
     ConflictException,
@@ -17,9 +16,6 @@ from app.modules.admin_users.repository import AdminUserRepository
 from app.modules.admin_users.schemas import SubAdminCreateRequest, SubAdminUpdateRequest
 from app.modules.auth.repository import RefreshTokenRepository
 from app.modules.module_catalog.repository import ModuleRepository
-from app.services.email import send_email
-
-logger = logging.getLogger(__name__)
 
 
 # Granted to every new sub-admin regardless of what the super admin assigns —
@@ -68,34 +64,18 @@ class AdminUserService:
         if await self.repository.phone_number_taken(phone_number, exclude_id):
             raise ConflictException("This phone number is already in use.")
 
-    async def create(self, data: SubAdminCreateRequest, created_by: uuid.UUID) -> tuple[AdminUser, str]:
+    async def create(self, data: SubAdminCreateRequest, created_by: uuid.UUID) -> AdminUser:
         await self._check_uniqueness(data.username, data.email, data.phone_number)
 
-        temp_password = generate_temp_password()
-        payload = data.model_dump()
-        payload["password_hash"] = hash_password(temp_password)
+        payload = data.model_dump(exclude={"password", "confirm_password"})
+        payload["password_hash"] = hash_password(data.password)
         payload["created_by"] = created_by
         payload["is_super_admin"] = False
 
         admin_user = await self.repository.create(payload)
         await self.set_permissions(admin_user.id, DEFAULT_MODULE_KEYS, granted_by=created_by)
 
-        if data.email:
-            try:
-                await send_email(
-                    to=data.email,
-                    subject="Your HomeXperia Admin account",
-                    body_html=(
-                        f"<p>An admin account has been created for you.</p>"
-                        f"<p>Username: <strong>{data.username}</strong><br>"
-                        f"Temporary Password: <strong>{temp_password}</strong></p>"
-                        f"<p>Please log in and change your password.</p>"
-                    ),
-                )
-            except Exception:
-                logger.exception("sub_admin_credentials_email_failed", extra={"admin_user_id": str(admin_user.id)})
-
-        return await self.get_sub_admin(admin_user.id), temp_password
+        return await self.get_sub_admin(admin_user.id)
 
     async def update(self, admin_user_id: uuid.UUID, data: SubAdminUpdateRequest) -> AdminUser:
         await self.get_sub_admin(admin_user_id)  # 404 if missing/not a sub-admin

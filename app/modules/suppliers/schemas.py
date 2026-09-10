@@ -42,33 +42,21 @@ class SupplierDetail(BaseModel):
 
 class LinkedAccountCreatedResponse(BaseModel):
     """Returned by both the Supplier->Customer and Customer->Supplier linking
-    endpoints — just enough for the admin UI to show what was created and
-    confirm the credentials email was sent."""
+    endpoints — just enough for the admin UI to show what was created."""
 
     linked_id: uuid.UUID
     login_identifier: str  # customer_code or username, whichever was just created
-    email_sent_to: str | None
-    # Same "shown once, until SMTP is live" rationale as SupplierCreateResponse.
-    temporary_password: str
 
 
 class SupplierCreateResponse(SupplierDetail):
-    # SMTP isn't configured yet — until it is, the admin UI shows this once,
-    # right after creation, so the temp password can be shared manually.
-    # Never persisted or returned again after this response.
-    temporary_password: str
     # Set only when also_create_customer was checked — surfaces that linked
-    # account's own credentials too, since its email would otherwise be the
-    # only place they ever appeared.
+    # account's login identifier too, since it isn't shown anywhere else.
     linked_customer: LinkedAccountCreatedResponse | None = None
 
 
 class SupplierCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=250)
     start_of_subscription: date | None = None
-    # Optional — if left blank, the auto-generated temp password is only
-    # ever shown once in the admin UI (see SupplierCreateResponse) instead
-    # of also being emailed.
     email: EmailStr | None = None
     phone_number: str = Field(min_length=10, max_length=20)
     gst_number: str | None = None
@@ -80,10 +68,29 @@ class SupplierCreateRequest(BaseModel):
     logo_url: str | None = None
     profile_image_url: str | None = None
     username: str = Field(min_length=1, max_length=100)
-    # Auto-provisions a linked Customer identity (own customer_code + emailed
-    # temp password) so this supplier can also log into the Client Portal —
-    # see CustomerService/SupplierService's create_linked_customer.
+    password: str = Field(min_length=8)
+    confirm_password: str
+    # Auto-provisions a linked Customer identity (own customer_code, same
+    # password as this account) so this supplier can also log into the
+    # Client Portal — see SupplierService.create_linked_customer.
     also_create_customer: bool = False
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "SupplierCreateRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match.")
+        return self
+
+
+class CreateCustomerAccountRequest(BaseModel):
+    password: str = Field(min_length=8)
+    confirm_password: str
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "CreateCustomerAccountRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match.")
+        return self
 
 
 class SupplierUpdateRequest(BaseModel):

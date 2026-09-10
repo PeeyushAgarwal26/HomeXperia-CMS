@@ -121,7 +121,7 @@ async def export_filter_values(
         ]
         for i, item in enumerate(items)
     ]
-    filename = f"FilterValueList_{datetime.now().strftime('%d-%b-%Y_%H.%M')}.xlsx"
+    filename = f"FilterValueList_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
     return build_xlsx_response(filename, headers, rows)
 
 

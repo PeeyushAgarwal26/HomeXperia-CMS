@@ -94,8 +94,10 @@ def detect_wall_quad(mask_gray: np.ndarray, debug_img: np.ndarray | None = None,
 
         top_lines, bot_lines = [], []
         if lines is not None:
-            for line in lines:
-                x1, y1, x2, y2 = line[0]
+            # cv2.HoughLinesP doesn't reliably return the documented (N,1,4)
+            # shape - reshape defensively rather than assume line[0] indexes.
+            for line in lines.reshape(-1, 4):
+                x1, y1, x2, y2 = line
                 dx, dy = float(x2 - x1), float(y2 - y1)
                 if abs(dx) < 1e-3:
                     continue

@@ -68,7 +68,9 @@ def detect_floor_quad(room_img: np.ndarray) -> tuple[np.ndarray, int] | None:
 
     left_segs, right_segs = [], []
     if lines_full is not None:
-        for x1_, y1_, x2_, y2_ in lines_full[:, 0]:
+        # cv2.HoughLinesP doesn't reliably return the documented (N,1,4)
+        # shape - reshape defensively rather than assume [:, 0] unpacks.
+        for x1_, y1_, x2_, y2_ in lines_full.reshape(-1, 4):
             y1g = y1_ + lower_y0
             y2g = y2_ + lower_y0
             dx = float(x2_ - x1_)
@@ -126,7 +128,7 @@ def detect_floor_quad(room_img: np.ndarray) -> tuple[np.ndarray, int] | None:
     if lines_ref is not None:
         floor_top_y_init = floor_top_y
         best_score, best_y = 0.0, floor_top_y
-        for x1_, y1_, x2_, y2_ in lines_ref[:, 0]:
+        for x1_, y1_, x2_, y2_ in lines_ref.reshape(-1, 4):
             if abs(y2_ - y1_) > 14:
                 continue
             length = math.hypot(x2_ - x1_, y2_ - y1_)
@@ -358,8 +360,11 @@ def apply_pattern(
         if coords is None:
             return room_img
 
-        coords_hom = np.ones((len(coords), 3), dtype=np.float32)
-        coords_hom[:, :2] = coords[:, 0, :]
+        # cv2.findNonZero doesn't reliably return the documented (N,1,2)
+        # shape - reshape defensively rather than assume [:, 0, :] indexes.
+        coords_flat = coords.reshape(-1, 2)
+        coords_hom = np.ones((len(coords_flat), 3), dtype=np.float32)
+        coords_hom[:, :2] = coords_flat
 
         flat_hom_scale = (M_inv @ coords_hom.T).T
         valid_mask_scale = flat_hom_scale[:, 2] > 0.001

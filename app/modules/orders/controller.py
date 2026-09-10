@@ -60,7 +60,7 @@ async def export_orders(
         ]
         for i, (order, customer) in enumerate(rows)
     ]
-    filename = f"Orders_{datetime.now().strftime('%d-%b-%Y_%H.%M')}.xlsx"
+    filename = f"Orders_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
     return build_xlsx_response(filename, headers, export_rows)
 
 

@@ -16,6 +16,7 @@ from app.modules.suppliers.models import Supplier
 from app.modules.suppliers.schemas import (
     AssignAccessRequest,
     AssignAccessResponse,
+    CreateCustomerAccountRequest,
     LinkedAccountCreatedResponse,
     StatusUpdateRequest,
     SupplierCategoriesRequest,
@@ -118,7 +119,7 @@ async def export_suppliers(
         ]
         for i, item in enumerate(items)
     ]
-    filename = f"SupplierList_{datetime.now().strftime('%d-%b-%Y_%H.%M')}.xlsx"
+    filename = f"SupplierList_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
     return build_xlsx_response(filename, headers, rows)
 
 
@@ -138,12 +139,8 @@ async def create_supplier(
     current_admin: AdminUser = Depends(_require_supplier_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    supplier, temp_password, linked_customer = await SupplierService(session).create(
-        body, created_by=current_admin.id
-    )
-    data = SupplierCreateResponse(
-        **_to_detail(supplier).model_dump(), temporary_password=temp_password, linked_customer=linked_customer
-    )
+    supplier, linked_customer = await SupplierService(session).create(body, created_by=current_admin.id)
+    data = SupplierCreateResponse(**_to_detail(supplier).model_dump(), linked_customer=linked_customer)
     return controller.success(data=data, message="Supplier created successfully.")
 
 
@@ -175,11 +172,14 @@ async def delete_supplier(
 )
 async def create_customer_account_for_supplier(
     supplier_id: uuid.UUID,
+    body: CreateCustomerAccountRequest,
     current_admin: AdminUser = Depends(_require_supplier_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    data = await SupplierService(session).create_linked_customer(supplier_id, created_by=current_admin.id)
-    return controller.success(data=data, message="Customer account created and credentials emailed.")
+    data = await SupplierService(session).create_linked_customer(
+        supplier_id, body.password, created_by=current_admin.id
+    )
+    return controller.success(data=data, message="Customer account created.")
 
 
 @router.patch("/{supplier_id}/status", response_model=APIResponse[dict])

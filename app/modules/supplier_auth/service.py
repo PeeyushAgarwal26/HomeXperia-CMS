@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.linked_profile_sync import shared_profile_fields
 from app.core.config import settings
 from app.core.security import (
     create_access_token,
@@ -15,6 +16,7 @@ from app.core.security import (
 from app.exceptions.http_exceptions import ConflictException, ForbiddenException, UnauthorizedException
 from app.modules.auth.schemas import TokenPair
 from app.modules.categories.models import ChildCategory
+from app.modules.customers.repository import CustomerRepository
 from app.modules.logs.repository import SupplierLoginEventRepository
 from app.modules.suppliers.categories_repository import SupplierCategoryRepository
 from app.modules.suppliers.models import Supplier
@@ -47,6 +49,7 @@ class SupplierAuthService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.supplier_repo = SupplierRepository(session)
+        self.linked_customer_repo = CustomerRepository(session)
         self.refresh_token_repo = SupplierRefreshTokenRepository(session)
         self.login_event_repo = SupplierLoginEventRepository(session)
         self.category_map_repo = SupplierCategoryRepository(session)
@@ -156,7 +159,10 @@ class SupplierAuthService:
     ) -> Supplier:
         if await self.supplier_repo.phone_number_taken(data.phone_number, exclude_id=supplier.id):
             raise ConflictException("This phone number is already in use.")
-        await self.supplier_repo.update(supplier.id, data.model_dump())
+        payload = data.model_dump()
+        await self.supplier_repo.update(supplier.id, payload)
+        if supplier.linked_customer_id is not None:
+            await self.linked_customer_repo.update(supplier.linked_customer_id, shared_profile_fields(payload))
         updated = await self.supplier_repo.get_by_id(supplier.id)
         assert updated is not None
         return updated

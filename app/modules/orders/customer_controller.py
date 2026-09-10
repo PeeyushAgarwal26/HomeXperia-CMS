@@ -12,9 +12,11 @@ from app.common.response import APIResponse
 from app.db.session import get_db_session
 from app.modules.customers.models import Customer
 from app.modules.orders.schemas import (
+    CartCreateRequest,
     CartDetail,
-    CartItemDeleteRequest,
+    CartItemRemoveRequest,
     CartItemUpsertRequest,
+    CartSummary,
     MyOrderListItem,
     OrderCreateRequest,
     OrderCreateResponse,
@@ -26,22 +28,44 @@ order_router = APIRouter(prefix="/order", tags=["Customer Orders"])
 controller = BaseController()
 
 
-@cart_router.post("/create", response_model=APIResponse[CartDetail])
+@cart_router.post("/create", response_model=APIResponse[CartDetail], status_code=201)
 async def create_cart(
+    body: CartCreateRequest,
     customer: Customer = Depends(get_current_customer),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    data = await OrderService(session).get_cart_detail(customer.id)
-    return controller.success(data=data)
+    data = await OrderService(session).create_cart(customer.id, body)
+    return controller.success(data=data, message="Cart created.")
 
 
-@cart_router.get("/get", response_model=APIResponse[CartDetail])
+@cart_router.get("/list", response_model=APIResponse[list[CartSummary]])
+async def list_carts(
+    pagination: Annotated[PaginationParams, Depends()],
+    customer: Customer = Depends(get_current_customer),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    items, total = await OrderService(session).list_carts(customer.id, pagination.offset, pagination.limit)
+    return controller.paginated(data=items, total=total, page=pagination.page, page_size=pagination.page_size)
+
+
+@cart_router.get("/{cart_id}", response_model=APIResponse[CartDetail])
 async def get_cart(
+    cart_id: uuid.UUID,
     customer: Customer = Depends(get_current_customer),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    data = await OrderService(session).get_cart_detail(customer.id)
+    data = await OrderService(session).get_cart_detail(customer.id, cart_id)
     return controller.success(data=data)
+
+
+@cart_router.delete("/{cart_id}", response_model=APIResponse[None])
+async def delete_cart(
+    cart_id: uuid.UUID,
+    customer: Customer = Depends(get_current_customer),
+    session: AsyncSession = Depends(get_db_session),
+) -> APIResponse:
+    await OrderService(session).delete_cart(customer.id, cart_id)
+    return controller.success(data=None, message="Cart deleted.")
 
 
 @cart_router.post("/update", response_model=APIResponse[CartDetail])
@@ -54,13 +78,13 @@ async def update_cart_item(
     return controller.success(data=data, message="Cart updated.")
 
 
-@cart_router.post("/delete", response_model=APIResponse[CartDetail])
-async def delete_cart_item(
-    body: CartItemDeleteRequest,
+@cart_router.post("/remove-item", response_model=APIResponse[CartDetail])
+async def remove_cart_item(
+    body: CartItemRemoveRequest,
     customer: Customer = Depends(get_current_customer),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
-    data = await OrderService(session).delete_cart_item(customer.id, body)
+    data = await OrderService(session).remove_cart_item(customer.id, body)
     return controller.success(data=data, message="Cart updated.")
 
 

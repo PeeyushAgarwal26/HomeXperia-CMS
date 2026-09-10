@@ -1,10 +1,10 @@
-import logging
 import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.linked_profile_sync import shared_profile_fields
 from app.common.pagination import PaginationParams, SortParams
-from app.core.security import generate_temp_password, hash_password
+from app.core.security import hash_password
 from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
 from app.modules.customers.models import Customer, SupplierCustomerTheme
 from app.modules.customers.repository import CustomerRepository
@@ -16,9 +16,6 @@ from app.modules.customers.schemas import (
 from app.modules.customers.suppliers_repository import CustomerSupplierRepository
 from app.modules.customers.theme_repository import SupplierCustomerThemeRepository
 from app.modules.suppliers.repository import SupplierRepository
-from app.services.email import send_email
-
-logger = logging.getLogger(__name__)
 
 
 class CustomerService:
@@ -106,56 +103,47 @@ class CustomerService:
 
     async def create(
         self, data: CustomerCreateRequest, created_by: uuid.UUID
-    ) -> tuple[Customer, str, LinkedAccountCreatedResponse | None]:
+    ) -> tuple[Customer, LinkedAccountCreatedResponse | None]:
         await self._check_uniqueness(data.customer_code, data.phone_number, data.email)
         if data.also_create_supplier and await self.supplier_repository.username_taken(data.supplier_username):
             raise ConflictException("This username is already in use.")
 
-        temp_password = generate_temp_password()
-        payload = data.model_dump(exclude={"also_create_supplier", "supplier_username"})
-        payload["password_hash"] = hash_password(temp_password)
+        payload = data.model_dump(
+            exclude={"password", "confirm_password", "also_create_supplier", "supplier_username"}
+        )
+        payload["password_hash"] = hash_password(data.password)
         payload["created_by"] = created_by
 
         customer = await self.repository.create(payload)
 
-        if customer.email:
-            try:
-                await send_email(
-                    to=customer.email,
-                    subject="Your HomeXperia Client Portal account",
-                    body_html=(
-                        f"<p>A Client Portal account has been created for you.</p>"
-                        f"<p>Customer Code: <strong>{customer.customer_code}</strong><br>"
-                        f"Temporary Password: <strong>{temp_password}</strong></p>"
-                        f"<p>Please log in and change your password.</p>"
-                    ),
-                )
-            except Exception:
-                logger.exception("customer_credentials_email_failed", extra={"customer_id": str(customer.id)})
-
         linked_supplier = (
             await self.promote_to_supplier(
-                customer.id, data.supplier_username, state_code=None, city=None, created_by=created_by
+                customer.id,
+                data.supplier_username,
+                password=data.password,
+                state_code=None,
+                city=None,
+                created_by=created_by,
             )
             if data.also_create_supplier
             else None
         )
-        return await self.get_customer(customer.id), temp_password, linked_supplier
+        return await self.get_customer(customer.id), linked_supplier
 
     async def promote_to_supplier(
         self,
         customer_id: uuid.UUID,
         username: str,
+        password: str,
         state_code: str | None,
         city: str | None,
         created_by: uuid.UUID,
     ) -> LinkedAccountCreatedResponse:
         """Auto-provisions this customer's own Supplier identity — a fully
-        independent account (own username, own random temp password)
-        carrying over the customer's shared fields. state_code/city are only
-        taken from the arguments when the customer record doesn't already
-        have them set — Supplier requires both, Customer allows either to be
-        null."""
+        independent account (own username, own password) carrying over the
+        customer's shared fields. state_code/city are only taken from the
+        arguments when the customer record doesn't already have them set —
+        Supplier requires both, Customer allows either to be null."""
         customer = await self.get_customer(customer_id)
         if customer.linked_supplier_id is not None:
             raise ConflictException("This customer already has a linked supplier account.")
@@ -167,7 +155,6 @@ class CustomerService:
         if not resolved_state_code or not resolved_city:
             raise BadRequestException("State and city are required to create a supplier account.")
 
-        temp_password = generate_temp_password()
         supplier = await self.supplier_repository.create(
             {
                 "name": customer.name,
@@ -178,8 +165,10 @@ class CustomerService:
                 "pin_code": customer.pin_code,
                 "state_code": resolved_state_code,
                 "city": resolved_city,
+                "logo_url": customer.logo_url,
+                "profile_image_url": customer.profile_image_url,
                 "username": username,
-                "password_hash": hash_password(temp_password),
+                "password_hash": hash_password(password),
                 "created_by": created_by,
                 "linked_customer_id": customer.id,
             }
@@ -192,30 +181,10 @@ class CustomerService:
             mapped_by=created_by,
         )
 
-        if customer.email:
-            try:
-                await send_email(
-                    to=customer.email,
-                    subject="Your HomeXperia Supplier Portal account",
-                    body_html=(
-                        f"<p>A Supplier Portal account has been created for you.</p>"
-                        f"<p>Username: <strong>{username}</strong><br>"
-                        f"Temporary Password: <strong>{temp_password}</strong></p>"
-                        f"<p>Please log in and change your password.</p>"
-                    ),
-                )
-            except Exception:
-                logger.exception("linked_supplier_credentials_email_failed", extra={"customer_id": str(customer_id)})
-
-        return LinkedAccountCreatedResponse(
-            linked_id=supplier.id,
-            login_identifier=username,
-            email_sent_to=customer.email,
-            temporary_password=temp_password,
-        )
+        return LinkedAccountCreatedResponse(linked_id=supplier.id, login_identifier=username)
 
     async def update(self, customer_id: uuid.UUID, data: CustomerUpdateRequest) -> Customer:
-        await self.get_customer(customer_id)
+        customer = await self.get_customer(customer_id)
         await self._check_uniqueness(data.customer_code, data.phone_number, data.email, exclude_id=customer_id)
 
         payload = data.model_dump(exclude={"password", "confirm_password"})
@@ -223,6 +192,8 @@ class CustomerService:
             payload["password_hash"] = hash_password(data.password)
 
         await self.repository.update(customer_id, payload)
+        if customer.linked_supplier_id is not None:
+            await self.supplier_repository.update(customer.linked_supplier_id, shared_profile_fields(payload))
         return await self.get_customer(customer_id)
 
     async def delete(self, customer_id: uuid.UUID) -> None:

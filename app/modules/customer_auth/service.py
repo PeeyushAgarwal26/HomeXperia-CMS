@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.common.linked_profile_sync import shared_profile_fields
 from app.core.config import settings
 from app.core.security import create_access_token, generate_refresh_token, hash_token, verify_password
 from app.exceptions.http_exceptions import ConflictException, ForbiddenException, UnauthorizedException
@@ -17,6 +18,7 @@ from app.modules.customers.models import Customer
 from app.modules.customers.repository import CustomerRepository
 from app.modules.customers.suppliers_repository import CustomerSupplierRepository
 from app.modules.logs.repository import CustomerLoginEventRepository
+from app.modules.suppliers.repository import SupplierRepository
 
 # See AuthService's identical constant — same rationale: a hard page reload can
 # fire two near-simultaneous refresh calls holding the same pre-rotation token.
@@ -39,6 +41,7 @@ class CustomerAuthService:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
         self.customer_repo = CustomerRepository(session)
+        self.linked_supplier_repo = SupplierRepository(session)
         self.refresh_token_repo = CustomerRefreshTokenRepository(session)
         self.login_event_repo = CustomerLoginEventRepository(session)
         self.customer_supplier_repo = CustomerSupplierRepository(session)
@@ -156,7 +159,10 @@ class CustomerAuthService:
             raise ConflictException("This phone number is already in use.")
         if data.email and await self.customer_repo.email_taken(data.email, exclude_id=customer.id):
             raise ConflictException("This email is already in use.")
-        await self.customer_repo.update(customer.id, data.model_dump())
+        payload = data.model_dump()
+        await self.customer_repo.update(customer.id, payload)
+        if customer.linked_supplier_id is not None:
+            await self.linked_supplier_repo.update(customer.linked_supplier_id, shared_profile_fields(payload))
         updated = await self.customer_repo.get_by_id(customer.id)
         assert updated is not None
         return updated

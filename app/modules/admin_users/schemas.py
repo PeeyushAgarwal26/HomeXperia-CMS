@@ -31,19 +31,9 @@ class SubAdminDetail(BaseModel):
     is_active: bool
 
 
-class SubAdminCreateResponse(SubAdminDetail):
-    # SMTP isn't configured yet — until it is, the admin UI shows this once,
-    # right after creation, so the temp password can be shared manually.
-    # Never persisted or returned again after this response.
-    temporary_password: str
-
-
 class SubAdminCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=250)
     date_of_birth: date | None = None
-    # Optional — if left blank, the auto-generated temp password is only
-    # ever shown once in the admin UI (see SubAdminCreateResponse) instead
-    # of also being emailed.
     email: EmailStr | None = None
     address: str | None = None
     phone_number: str = Field(min_length=10, max_length=20)
@@ -52,6 +42,14 @@ class SubAdminCreateRequest(BaseModel):
     city: str = Field(min_length=1, max_length=100)
     profile_image_url: str | None = None
     username: str = Field(min_length=1, max_length=100)
+    password: str = Field(min_length=8)
+    confirm_password: str
+
+    @model_validator(mode="after")
+    def passwords_match(self) -> "SubAdminCreateRequest":
+        if self.password != self.confirm_password:
+            raise ValueError("Passwords do not match.")
+        return self
 
 
 class SubAdminUpdateRequest(BaseModel):

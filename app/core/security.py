@@ -40,14 +40,6 @@ def decode_token(token: str) -> dict[str, Any]:
         return {}
 
 
-def generate_temp_password() -> str:
-    """A random, human-typeable temporary password for a newly created account
-    (Sub-Admin, Supplier, Customer, or a linked Supplier<->Customer identity) —
-    sent once by email, hashed immediately like any other password, never
-    logged or stored in plaintext anywhere."""
-    return secrets.token_urlsafe(9)
-
-
 def generate_refresh_token() -> tuple[str, str]:
     """Return (raw_token, sha256_hash). Persist only the hash; send the raw value to the client once."""
     raw = secrets.token_urlsafe(32)

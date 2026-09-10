@@ -12,6 +12,7 @@ from app.common.deps import require_module_permission
 from app.common.pagination import FilterParams, PaginationParams
 from app.common.response import APIResponse
 from app.common.storage import StorageInterface, get_storage
+from app.common.xlsx_export import build_xlsx_response
 from app.db.session import get_db_session
 from app.exceptions.http_exceptions import BadRequestException
 from app.modules.admin_users.models import AdminUser
@@ -82,7 +83,7 @@ async def download_template(
     storage: StorageInterface = Depends(get_storage),
 ):
     content = await ProductUploadService(session, storage).build_template(supplier_id)
-    filename = f"ProductUploadFormat_{datetime.now().strftime('%d-%b-%Y_%H.%M')}.xlsx"
+    filename = f"ProductUploadFormat_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
     return StreamingResponse(
         BytesIO(content),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -174,6 +175,36 @@ async def list_logs(
     start = pagination.offset + 1
     data = [_to_list_item(item, start + i) for i, item in enumerate(items)]
     return controller.paginated(data=data, total=total, page=pagination.page, page_size=pagination.page_size)
+
+
+@router.get("/logs/export")
+async def export_logs(
+    filters: Annotated[FilterParams, Depends()],
+    supplier_id: Annotated[uuid.UUID | None, Query()] = None,
+    from_date: Annotated[date | None, Query()] = None,
+    to_date: Annotated[date | None, Query()] = None,
+    _: AdminUser = Depends(_require_log),
+    session: AsyncSession = Depends(get_db_session),
+    storage: StorageInterface = Depends(get_storage),
+):
+    service = ProductUploadService(session, storage)
+    items = await service.list_for_export(filters.search, supplier_id, from_date, to_date)
+    headers = ["Sno", "File Name", "Date", "Supplier", "Total Rows", "Success", "Errors", "Status"]
+    rows = [
+        [
+            i + 1,
+            item.file_name,
+            item.created_at.strftime("%d-%b-%Y %H:%M"),
+            item.supplier.name,
+            item.total_rows,
+            item.success_count,
+            item.error_count,
+            item.status.capitalize(),
+        ]
+        for i, item in enumerate(items)
+    ]
+    filename = f"ProductUploadLog_{datetime.now().strftime('%d-%b-%Y_%H.%M.%S')}.xlsx"
+    return build_xlsx_response(filename, headers, rows)
 
 
 @router.get("/logs/{log_id}", response_model=APIResponse[UploadLogDetail])
