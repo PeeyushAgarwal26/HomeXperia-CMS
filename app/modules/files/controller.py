@@ -16,7 +16,7 @@ router = APIRouter(prefix="/files", tags=["Files"])
 controller = BaseController()
 
 _ALLOWED_CONTENT_TYPES = {"image/jpeg", "image/png", "image/webp"}
-_MAX_FILE_SIZE_BYTES = 5 * 1024 * 1024
+_MAX_FILE_SIZE_BYTES = 20 * 1024 * 1024
 
 
 async def _validated_bytes(file: UploadFile) -> None:
@@ -25,7 +25,7 @@ async def _validated_bytes(file: UploadFile) -> None:
 
     contents = await file.read()
     if len(contents) > _MAX_FILE_SIZE_BYTES:
-        raise BadRequestException("File too large — max 5 MB.")
+        raise BadRequestException("File too large — max 20 MB.")
     await file.seek(0)
 
 

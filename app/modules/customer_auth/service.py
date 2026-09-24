@@ -63,7 +63,11 @@ class CustomerAuthService:
         # "type": "customer_access" (not "access"/"supplier_access") so a
         # customer token can never be accepted by get_current_user or
         # get_current_supplier, or vice versa.
-        access_token = create_access_token(str(customer.id), extra={"type": "customer_access"})
+        access_token = create_access_token(
+            str(customer.id),
+            extra={"type": "customer_access"},
+            expires_minutes=settings.customer_access_token_expire_minutes,
+        )
         raw_refresh, refresh_hash = generate_refresh_token()
         expires_at = datetime.now(timezone.utc) + timedelta(days=settings.refresh_token_expire_days)
         await self.refresh_token_repo.create(

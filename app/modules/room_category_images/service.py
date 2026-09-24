@@ -165,10 +165,32 @@ class RoomCategoryImageService:
                 )
             )
         ).all()
-        child_id_by_names = {
-            (parent_name.strip().lower(), child_name.strip().lower()): child_id
-            for child_id, child_name, parent_name in rows
+        child_id_by_names: dict[tuple[str, str], uuid.UUID] = {}
+        children_by_parent: dict[str, list[uuid.UUID]] = {}
+        for child_id, child_name, parent_name in rows:
+            parent_key = parent_name.strip().lower()
+            child_id_by_names[(parent_key, child_name.strip().lower())] = child_id
+            children_by_parent.setdefault(parent_key, []).append(child_id)
+        # sub_type isn't reliably populated on real hotspots (confirmed
+        # against live data: floor/window hotspots routinely leave it
+        # blank, only wall sometimes sets it) - when it's missing or
+        # doesn't match, only fall back to a category when the parent has
+        # exactly ONE child (e.g. WINDOW -> CURTAINS is unambiguous either
+        # way). Leaving sub_category_id unresolved here silently drops the
+        # category filter on the customer-facing product fetch, showing
+        # every category's products at once - a multi-child parent (WALL,
+        # FLOOR) stays unresolved rather than guessing which sibling.
+        single_child_by_parent = {
+            parent: children[0] for parent, children in children_by_parent.items() if len(children) == 1
         }
+
+        def _resolve_sub_category_id(hotspot_type: str, hotspot_sub_type: str | None) -> uuid.UUID | None:
+            parent_key = hotspot_type.strip().lower()
+            if hotspot_sub_type:
+                matched = child_id_by_names.get((parent_key, hotspot_sub_type.strip().lower()))
+                if matched is not None:
+                    return matched
+            return single_child_by_parent.get(parent_key)
 
         return [
             LegacyHotspotItem(
@@ -178,7 +200,7 @@ class RoomCategoryImageService:
                 mask_image=item.mask_image_url,
                 x=item.x,
                 y=item.y,
-                sub_category_id=child_id_by_names.get((item.type, item.sub_type)) if item.sub_type else None,
+                sub_category_id=_resolve_sub_category_id(item.type, item.sub_type),
             )
             for item in items
         ]

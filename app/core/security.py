@@ -17,8 +17,12 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
     return bcrypt.checkpw(plain_password.encode(), password_hash.encode())
 
 
-def create_access_token(subject: str, extra: dict[str, Any] | None = None) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
+def create_access_token(
+    subject: str, extra: dict[str, Any] | None = None, expires_minutes: int | None = None
+) -> str:
+    expire = datetime.now(timezone.utc) + timedelta(
+        minutes=expires_minutes if expires_minutes is not None else settings.access_token_expire_minutes
+    )
     payload: dict[str, Any] = {"sub": subject, "type": "access", "exp": expire}
     if extra:
         payload.update(extra)

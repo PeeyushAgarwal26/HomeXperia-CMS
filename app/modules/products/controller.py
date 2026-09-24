@@ -98,12 +98,17 @@ async def list_products(
     filters: Annotated[FilterParams, Depends()],
     child_category_id: Annotated[uuid.UUID | None, Query()] = None,
     supplier_id: Annotated[uuid.UUID | None, Query()] = None,
+    # Scopes the list to only the suppliers a given customer is mapped to
+    # (Map Suppliers) - used by the QR code generator's product picker, so
+    # an admin building a catalogue mapping for a customer only sees
+    # products that customer's own storefront would actually offer them.
+    customer_id: Annotated[uuid.UUID | None, Query()] = None,
     _: AdminUser = Depends(_require_product_access),
     session: AsyncSession = Depends(get_db_session),
 ) -> APIResponse:
     service = ProductService(session)
     items, total = await service.list_products(
-        pagination, sort, filters.search, child_category_id, supplier_id
+        pagination, sort, filters.search, child_category_id, supplier_id, customer_id
     )
     catalogue_names = await service.get_catalogue_names_map([item.id for item in items])
     start = pagination.offset + 1

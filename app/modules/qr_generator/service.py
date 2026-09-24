@@ -131,6 +131,7 @@ class QrGeneratorService:
         self.room_image_repo = RoomCategoryImageRepository(session)
         self.product_repo = ProductRepository(session)
         self.saved_qr_repo = SavedQrCodeRepository(session)
+        self.product_filter_value_repo = ProductFilterValueRepository(session)
 
     async def generate(self, data: QrCodeGenerateRequest) -> bytes:
         customer = await self.customer_repo.get_by_customer_code(data.customer_code)
@@ -197,6 +198,14 @@ class QrGeneratorService:
     async def _to_hotspot_product_details(self, entry_id) -> list[HotspotProductDetail]:
         rows = await self.entry_repo.get_hotspot_products(entry_id)
         hotspot_repo = RoomCategoryImageHotspotRepository(self.session)
+        # Product.catalog_name is a sparse, upload-only free-text column (see
+        # products/controller.py's own _catalogue_name_from_filter_values) -
+        # most products only have the computed "Catalogue Name" filter value,
+        # not this column, so falling back to it alone left the admin QR
+        # panel's product chips blank for the majority of products.
+        catalogue_names = await self.product_filter_value_repo.get_catalogue_names_map(
+            [row.product_id for row in rows]
+        )
         details = []
         for row in rows:
             product = await self.product_repo.get_by_id(row.product_id)
@@ -224,7 +233,9 @@ class QrGeneratorService:
                     id=key_id,
                     hotspot_id=row.hotspot_id,
                     product_id=row.product_id,
-                    product_name=(product.catalog_name if product else None) or "",
+                    product_name=catalogue_names.get(row.product_id)
+                    or (product.catalog_name if product else None)
+                    or "",
                     product_image_url=product.image_url if product else None,
                     product_width=float(product.width) if product and product.width is not None else None,
                     label=label,

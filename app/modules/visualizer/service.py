@@ -25,6 +25,7 @@ from app.modules.visualizer.imaging import (
     rug_scene,
     shared,
     wall,
+    wall_scene,
 )
 from app.modules.visualizer.repository import UsageLogRepository
 from app.modules.visualizer.schemas import (
@@ -71,6 +72,29 @@ ROOM_DIMENSION_SCHEMA = {
             "estimated_length_ft": {"type": "number"},
         },
         "required": ["estimated_width_ft", "estimated_length_ft"],
+    },
+}
+
+WALL_DIMENSION_PROMPT = """Estimate the real-world width and height, in feet, of the single wall
+visible in this interior photo (the flat vertical surface the wall region
+covers - not the whole room). Use visible furniture, doors, windows, and
+typical ceiling height for scale.
+Return only a JSON object with:
+- estimated_width_ft
+- estimated_height_ft
+This is an estimate, not an exact measurement."""
+
+WALL_DIMENSION_SCHEMA = {
+    "type": "json_schema",
+    "name": "wall_dimension_estimate",
+    "schema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "estimated_width_ft": {"type": "number"},
+            "estimated_height_ft": {"type": "number"},
+        },
+        "required": ["estimated_width_ft", "estimated_height_ft"],
     },
 }
 
@@ -447,35 +471,194 @@ class VisualizerService:
             tooltip_element_label=request.curtain_style,
         )
 
-    # ---- wallart-visualizer-scene (placeholder — no real spec exists yet) ----
+    # ---- wallart-visualizer-scene ----
 
     async def wallart_visualizer_scene(
         self, request: WallArtVisualizerSceneRequest
     ) -> WallArtVisualizerSceneResponse:
-        width, height = 1200, 800
-        if request.room_url:
-            try:
-                image = await to_thread.run_sync(shared.download_image, request.room_url, storage_paths.CACHE_DIR)
-                height, width = image.shape[0], image.shape[1]
-            except Exception:
-                logger.exception("wallart_visualizer_scene: failed to load room_url, using placeholder size")
+        if request.room_b64:
+            image = await to_thread.run_sync(rug_scene.b64_to_cv2, request.room_b64)
+        elif request.room_url:
+            image = await to_thread.run_sync(shared.download_image, request.room_url, storage_paths.CACHE_DIR)
+        else:
+            raise BadRequestException("Could not load room image")
 
-        blank_mask = np.zeros((height, width), dtype=np.uint8)
-        _, mask_buffer = cv2.imencode(".png", blank_mask)
-        blank_mask_b64 = base64.b64encode(mask_buffer).decode()
+        height, width = image.shape[0], image.shape[1]
+        full_frame_quad = np.array(
+            [[0.0, 0.0], [width - 1.0, 0.0], [width - 1.0, height - 1.0], [0.0, height - 1.0]], dtype=np.float32
+        )
 
-        full_frame_quad = [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]]
-        centered_quad = [[0.35, 0.35], [0.65, 0.35], [0.65, 0.65], [0.35, 0.65]]
+        wall_mask_gray = None
+        if request.wall_mask_url:
+            mask_bytes = await external_clients.download_bytes(request.wall_mask_url)
+            wall_mask_gray = await to_thread.run_sync(self._decode_grayscale, mask_bytes)
+            if wall_mask_gray.shape[:2] != (height, width):
+                wall_mask_gray = await to_thread.run_sync(cv2.resize, wall_mask_gray, (width, height))
+
+        wall_quad = None
+        if wall_mask_gray is not None:
+            wall_quad = await to_thread.run_sync(wall.detect_wall_quad, wall_mask_gray)
+
+        if wall_quad is None:
+            # No mask, or detection failed on it — degrade to "the whole
+            # frame is the wall" (matches the old placeholder's fallback
+            # shape, but with a real all-white mask instead of a blank one,
+            # since a full-white mask correctly means "nothing occludes"
+            # rather than the old blank mask's backwards "nothing is wall").
+            wall_quad = full_frame_quad
+            wall_mask_for_encoding = np.full((height, width), 255, dtype=np.uint8)
+        else:
+            wall_mask_for_encoding = wall_mask_gray
+            if not wall_scene.wall_quad_is_reasonable(wall_quad):
+                # detect_wall_quad's straight-line fit latched onto something
+                # that isn't the wall's own flat plane (e.g. a wall mask whose
+                # boundary follows a sloped vaulted ceiling or an arched
+                # window cutout) — its two vertical edges come out wildly
+                # different heights, which reads as a dramatic, unrealistic
+                # tilt on anything hung using it as the homography basis.
+                # Fall back to a safe, always-axis-aligned sub-rectangle of
+                # the same mask instead of trusting that fit.
+                wall_quad = await to_thread.run_sync(wall_scene.largest_rect_in_mask, wall_mask_gray)
+
+        clear_region_quad = await to_thread.run_sync(wall_scene.estimate_wall_clear_region, image, wall_quad)
+        shadow_map = await to_thread.run_sync(rug_scene.extract_shadow_map, image, wall_mask_for_encoding)
+        wall_width_ft, wall_height_ft = await self._estimate_wall_dimensions(image, request.room_b64)
+        art_width_ft, art_height_ft = self._art_dimensions_ft(request.product_dimensions)
+
+        # Only used as a fallback aspect ratio below when no real
+        # product_dimensions were sent — the placement box must never take
+        # its shape from clear_region_quad itself (that quad's own w:h ratio
+        # is an artifact of whatever obstacle-free area was found, e.g. a
+        # wide/short strip, and stretches the art image if used directly).
+        product_image_aspect = 1.0
+        if request.product_url:
+            product_image = await to_thread.run_sync(
+                shared.download_image, request.product_url, storage_paths.CACHE_DIR
+            )
+            if product_image is not None and product_image.shape[0] > 0:
+                product_image_aspect = product_image.shape[1] / product_image.shape[0]
+
+        wall_xs, wall_ys = wall_quad[:, 0], wall_quad[:, 1]
+        wall_px_w = max(1.0, float(wall_xs.max() - wall_xs.min()))
+        wall_px_h = max(1.0, float(wall_ys.max() - wall_ys.min()))
+
+        clear_xs, clear_ys = clear_region_quad[:, 0], clear_region_quad[:, 1]
+        cx0, cx1 = float(clear_xs.min()), float(clear_xs.max())
+        cy0, cy1 = float(clear_ys.min()), float(clear_ys.max())
+        clear_w_px = max(1.0, cx1 - cx0)
+        clear_h_px = max(1.0, cy1 - cy0)
+
+        if art_width_ft and art_height_ft and wall_width_ft > 0 and wall_height_ft > 0:
+            px_per_ft_x = wall_px_w / wall_width_ft
+            px_per_ft_y = wall_px_h / wall_height_ft
+            art_w_px = art_width_ft * px_per_ft_x
+            art_h_px = art_height_ft * px_per_ft_y
+
+            fitted = art_w_px <= clear_w_px and art_h_px <= clear_h_px
+            if not fitted:
+                scale_down = min(clear_w_px / art_w_px, clear_h_px / art_h_px, 1.0)
+                art_w_px *= scale_down
+                art_h_px *= scale_down
+        else:
+            # No real product size known — size a box that occupies a
+            # reasonable fraction of the clear region while preserving the
+            # art image's own aspect ratio (classic "object-fit: contain"),
+            # rather than independently scaling width/height to 60% of the
+            # clear region's own w/h, which stretched the art to match
+            # whatever shape the clear-region detection happened to find.
+            fitted = True
+            if clear_w_px / product_image_aspect <= clear_h_px:
+                art_w_px = clear_w_px * 0.6
+                art_h_px = art_w_px / product_image_aspect
+            else:
+                art_h_px = clear_h_px * 0.6
+                art_w_px = art_h_px * product_image_aspect
+
+        center_x = (cx0 + cx1) / 2.0
+        center_y = (cy0 + cy1) / 2.0
+        placement_quad = np.array(
+            [
+                [center_x - art_w_px / 2.0, center_y - art_h_px / 2.0],
+                [center_x + art_w_px / 2.0, center_y - art_h_px / 2.0],
+                [center_x + art_w_px / 2.0, center_y + art_h_px / 2.0],
+                [center_x - art_w_px / 2.0, center_y + art_h_px / 2.0],
+            ],
+            dtype=np.float32,
+        )
+
+        def _norm_quad(quad: np.ndarray) -> list[list[float]]:
+            return [[float(x) / width, float(y) / height] for x, y in quad]
+
+        _, wall_mask_buffer = cv2.imencode(".png", wall_mask_for_encoding)
+        wall_mask_b64 = base64.b64encode(wall_mask_buffer).decode()
+        shadow_map_b64 = await to_thread.run_sync(rug_scene.encode_shadow_map_b64, shadow_map)
 
         return WallArtVisualizerSceneResponse(
-            wall_quad_norm=full_frame_quad,
+            wall_quad_norm=_norm_quad(wall_quad),
+            clear_region_quad_norm=_norm_quad(clear_region_quad),
             room_width=width,
             room_height=height,
-            wall_mask_b64=blank_mask_b64,
-            shadow_map_b64=blank_mask_b64,
-            placement_quad_norm=centered_quad,
-            placement_center_norm=[0.5, 0.5],
+            wall_width_ft=wall_width_ft,
+            wall_height_ft=wall_height_ft,
+            art_width_ft=art_width_ft,
+            art_height_ft=art_height_ft,
+            fitted=fitted,
+            used_depth=False,
+            wall_mask_b64=wall_mask_b64,
+            shadow_map_b64=shadow_map_b64,
+            placement_quad_norm=_norm_quad(placement_quad),
+            placement_center_norm=[center_x / width, center_y / height],
         )
+
+    async def _estimate_wall_dimensions(self, image: np.ndarray, room_b64: str | None) -> tuple[float, float]:
+        try:
+            if room_b64:
+                image_b64 = room_b64.split(",")[-1]
+            else:
+                _, buffer = cv2.imencode(".jpg", image)
+                image_b64 = base64.b64encode(buffer).decode()
+
+            client = external_clients.get_openai_client()
+            response = await client.responses.create(
+                model="gpt-4.1",
+                input=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "input_text", "text": WALL_DIMENSION_PROMPT},
+                            {"type": "input_image", "image_url": f"data:image/jpeg;base64,{image_b64}"},
+                        ],
+                    }
+                ],
+                text={"format": WALL_DIMENSION_SCHEMA},
+            )
+            result = json.loads(response.output_text)
+            return float(result["estimated_width_ft"]), float(result["estimated_height_ft"])
+        except Exception:
+            logger.exception("wall dimension estimate failed, using fallback")
+            return 8.0, 8.0
+
+    @staticmethod
+    def _art_dimensions_ft(product_dimensions: dict[str, Any] | None) -> tuple[float | None, float | None]:
+        if not product_dimensions:
+            return None, None
+        raw_width = product_dimensions.get("width")
+        raw_height = product_dimensions.get("height")
+        if raw_width is None or raw_height is None:
+            return None, None
+        try:
+            width, height = float(raw_width), float(raw_height)
+        except (TypeError, ValueError):
+            return None, None
+
+        # No unit is sent alongside these numbers today (frontend gap — see
+        # parseWallArtDimensions in the client) — treat a value too large to
+        # plausibly already be feet (no wall-art piece is ~20ft wide/tall)
+        # as inches instead.
+        inches_threshold = 20.0
+        width_ft = width / 12.0 if width > inches_threshold else width
+        height_ft = height / 12.0 if height > inches_threshold else height
+        return width_ft, height_ft
 
     # ---- reset ----
 

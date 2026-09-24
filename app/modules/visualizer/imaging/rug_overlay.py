@@ -474,7 +474,13 @@ def apply_pattern(
     rug_tex = texture_image
     mask_img = mask
 
-    rotation_deg = int(settings.get("rotation", 0))
+    # settings.get("rotation", 0) doesn't actually default anything -
+    # HotspotSettings.model_dump() always includes "rotation", set to None
+    # when unconfigured, and .get()'s default only applies to a MISSING
+    # key - so int(None) was throwing (silently swallowed upstream,
+    # returning the room untouched) whenever the admin left it unset.
+    rotation_raw = settings.get("rotation")
+    rotation_deg = int(rotation_raw) if rotation_raw is not None else 0
     repeat = 1  # hardcoded at the original call site for the 'rugs' category
 
     H, W = room_img.shape[:2]

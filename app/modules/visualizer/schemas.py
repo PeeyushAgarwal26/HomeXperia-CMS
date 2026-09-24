@@ -25,7 +25,14 @@ class HotspotProduct(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     productImageUrl: str | None = None
-    width: str | None = None
+    # Real product width comes in both shapes depending on how the supplier
+    # entered it: a plain number (e.g. 10.0) or a compound descriptive
+    # string (e.g. "5 X 7 FT") that curtain.parse_width_to_cm regex-parses
+    # the first number out of. That function already coerces its input via
+    # str(width_str) before matching, so accepting either shape here is
+    # safe — this was previously str-only, which 422'd on a plain numeric
+    # width even though nothing downstream actually required a string.
+    width: str | float | int | None = None
     productId: str | None = None
 
 
@@ -105,21 +112,42 @@ class RugVisualizerSceneResponse(BaseModel):
 
 class WallArtVisualizerSceneRequest(BaseModel):
     room_url: str | None = None
+    room_b64: str | None = None
     wall_mask_url: str | None = None
     product_url: str | None = None
+    # {"width": <number>, "height": <number>}, unit ambiguous on the wire —
+    # see _art_dimensions_ft in service.py for how this gets resolved.
     product_dimensions: dict[str, Any] | None = None
 
 
 class WallArtVisualizerSceneResponse(BaseModel):
-    """No real wall-art detection algorithm exists yet anywhere (not in the
-    Flask backend this module ported from, not specified since) — the
-    frontend's own code already treats this as a dev/dummy response. This is
-    a structurally-valid placeholder, not a ported feature; replace once
-    there's a real spec."""
+    """Real detection, mirroring rug_visualizer_scene's structure: wall.py's
+    existing detect_wall_quad (already used by the wallpaper/paint apply
+    path) for wall_quad_norm, wall_scene.estimate_wall_clear_region (new,
+    same color-region-growing technique rug's estimate_floor_masks already
+    uses) for clear_region_quad_norm, and the same OpenAI vision-estimate
+    pattern rug uses for room ft-size, re-prompted for the wall specifically,
+    for wall_width_ft/wall_height_ft."""
 
     wall_quad_norm: list[list[float]]
+    # Obstacle-free sub-region within wall_quad_norm (avoids light switches,
+    # outlets, mirrors, existing art) — distinct from the full detected wall.
+    clear_region_quad_norm: list[list[float]]
     room_width: int
     room_height: int
+    wall_width_ft: float
+    wall_height_ft: float
+    # None when the caller never sent product_dimensions — never fabricated.
+    art_width_ft: float | None
+    art_height_ft: float | None
+    # True if the art's real-world size fit inside clear_region_quad_norm
+    # without needing to be scaled down.
+    fitted: bool
+    # Old API had this (likely a mobile depth-sensor flag); no true depth
+    # estimation exists anywhere in this codebase, and none is being added
+    # here — always False. Kept only so a caller reading this field doesn't
+    # break; don't treat it as a real capability flag.
+    used_depth: bool
     wall_mask_b64: str
     shadow_map_b64: str
     placement_quad_norm: list[list[float]]

@@ -327,10 +327,18 @@ def apply_pattern(
     floor_tex = texture_image
     mask_img = mask
 
-    repeat = int(settings.get("repeat", 12))
-    rotation_deg = int(settings.get("rotation", 0))
-    grout_width = int(settings.get("groutWidth", 0))
-    grout_color = settings.get("groutColor", "#000000")
+    # settings.get(key, default) doesn't actually default anything here -
+    # HotspotSettings.model_dump() always includes these keys, set to None
+    # when unconfigured, and .get()'s default only applies to a MISSING
+    # key - so int(None) was throwing (silently swallowed upstream,
+    # returning the room untouched) whenever the admin left these unset.
+    repeat_raw = settings.get("repeat")
+    repeat = int(repeat_raw) if repeat_raw is not None else 12
+    rotation_raw = settings.get("rotation")
+    rotation_deg = int(rotation_raw) if rotation_raw is not None else 0
+    grout_width_raw = settings.get("groutWidth")
+    grout_width = int(grout_width_raw) if grout_width_raw is not None else 0
+    grout_color = settings.get("groutColor") or "#000000"
 
     H, W = room_img.shape[:2]
 

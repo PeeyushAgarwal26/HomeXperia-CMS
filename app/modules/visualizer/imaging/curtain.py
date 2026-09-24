@@ -142,8 +142,16 @@ def apply_pattern(
     curtain_tex = texture_image
     mask_img = mask
 
-    repeat = int(settings.get("repeat", 12))
-    shading_strength = float(settings.get("shading", 0.6))
+    # settings.get(key, default) doesn't actually default anything here -
+    # HotspotSettings.model_dump() always includes these keys, set to None
+    # when unconfigured, and .get()'s default only applies to a MISSING
+    # key - so int(None)/float(None) was throwing (silently swallowed
+    # upstream, returning the room untouched) whenever the admin left
+    # repeat/shading unset.
+    repeat_raw = settings.get("repeat")
+    repeat = int(repeat_raw) if repeat_raw is not None else 12
+    shading_raw = settings.get("shading")
+    shading_strength = float(shading_raw) if shading_raw is not None else 0.6
 
     if repeat == 0:
         raw_curtain_width = settings.get("curtainWidthCm")

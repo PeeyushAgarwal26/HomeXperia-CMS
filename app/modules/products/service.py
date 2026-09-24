@@ -6,6 +6,7 @@ from app.common.pagination import PaginationParams, SortParams
 from app.exceptions.http_exceptions import BadRequestException, ConflictException, NotFoundException
 from app.modules.categories.repository import ChildCategoryRepository
 from app.modules.customers.models import Customer
+from app.modules.customers.repository import CustomerRepository
 from app.modules.customers.suppliers_repository import CustomerSupplierRepository
 from app.modules.filters.repository import FilterValueRepository
 from app.modules.products.models import Product
@@ -29,6 +30,7 @@ class ProductService:
         self.filter_value_repository = FilterValueRepository(session)
         self.product_filter_value_repository = ProductFilterValueRepository(session)
         self.customer_supplier_repository = CustomerSupplierRepository(session)
+        self.customer_repository = CustomerRepository(session)
 
     async def _resolve_visible_supplier_ids(self, customer: Customer | None) -> list[uuid.UUID] | None:
         """None = unscoped (anonymous/Shopify-embed caller — no customer
@@ -50,11 +52,25 @@ class ProductService:
         search: str | None,
         child_category_id: uuid.UUID | None,
         supplier_id: uuid.UUID | None,
+        customer_id: uuid.UUID | None = None,
     ) -> tuple[list[Product], int]:
         filters: dict = {}
         if child_category_id:
             filters["child_category_id"] = child_category_id
-        if supplier_id:
+        if customer_id:
+            # Admin tooling that's building something FOR a specific customer
+            # (currently: the QR code generator's product picker) - reuses
+            # the exact same Map Suppliers scoping the customer's own
+            # storefront already enforces, so an admin can't attach a
+            # product from a supplier that customer isn't mapped to. Takes
+            # priority over a plain supplier_id filter (no caller sends both
+            # today); an unresolvable customer_id falls back to unscoped,
+            # same as this resolver's own documented behavior.
+            customer = await self.customer_repository.get_by_id(customer_id)
+            visible_supplier_ids = await self._resolve_visible_supplier_ids(customer)
+            if visible_supplier_ids is not None:
+                filters["supplier_id"] = visible_supplier_ids
+        elif supplier_id:
             filters["supplier_id"] = supplier_id
         return await self.repository.get_all(
             filters=filters or None,

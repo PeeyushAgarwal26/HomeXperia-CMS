@@ -11,7 +11,14 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_name: str = "homexperia-admin-api"
     app_version: str = "0.1.0"
-    app_debug: bool = True
+    # Defaults to False (not True) on purpose: FastAPI's debug=True makes
+    # Starlette's outermost ServerErrorMiddleware return the raw traceback
+    # (full local filesystem paths included) straight in the HTTP response
+    # body for ANY unhandled exception, bypassing the app's own registered
+    # exception handlers entirely - a deployment that forgets to set
+    # APP_DEBUG explicitly should fail safe, not leak internals. Local dev's
+    # own .env already sets APP_DEBUG=true explicitly for real tracebacks.
+    app_debug: bool = False
     app_host: str = "0.0.0.0"
     app_port: int = 8000
 
@@ -20,6 +27,11 @@ class Settings(BaseSettings):
     secret_key: str = "insecure-default-change-me"
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 30
+    # Customer-facing client-frontend only (admin/supplier access tokens keep
+    # using access_token_expire_minutes) — longer-lived since a shopper
+    # session on the visualizer tends to run longer than a 30-minute admin
+    # editing session before the refresh flow would otherwise kick in.
+    customer_access_token_expire_minutes: int = 60
     refresh_token_expire_days: int = 7
     # Hard ceiling on a session's total age, independent of activity — without
     # this, a rotating refresh token (see auth/service.py) renews forever as
