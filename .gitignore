@@ -30,7 +30,11 @@ coverage.xml
 
 # Logs
 *.log
-logs/
+# Leading slash anchors this to the repo root's own runtime log directory
+# (settings.log_dir) - a bare "logs/" also matched app/modules/logs/, a real
+# wired-in module (see app/api/v1/router.py), which meant its entire source
+# was silently untracked and had zero git history.
+/logs/
 
 # setup.sh runtime state
 *.pid
