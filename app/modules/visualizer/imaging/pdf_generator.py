@@ -31,12 +31,15 @@ import os
 import tempfile
 import uuid
 from pathlib import Path
+from urllib.parse import urlparse
 
 import httpx
 import qrcode
 from fpdf import FPDF
 from PIL import Image as PILImage
 from PIL import ImageOps
+
+from app.common.storage import resolve_uploaded_file_path
 
 PAGE_WIDTH = 381
 PAGE_HEIGHT = 271
@@ -94,6 +97,17 @@ def download_image_as_pil(url: str | None, http_client: httpx.Client) -> PILImag
             return None
         if os.path.isfile(url):
             return PILImage.open(url)
+        # Every room/product image the PDF embeds was very likely just
+        # generated/uploaded by this same backend moments earlier (e.g.
+        # final_image_url from process-room) - the URL is absolute
+        # (http://host/uploads/...) since the frontend builds it that way,
+        # but the path portion still matches our own uploads layout, so
+        # read it straight off disk instead of round-tripping an HTTP GET
+        # back to ourselves. Falls through to a real download for anything
+        # that isn't one of our own upload URLs (external brand logos etc).
+        local_path = resolve_uploaded_file_path(urlparse(url).path)
+        if local_path is not None and local_path.exists():
+            return PILImage.open(local_path)
         resp = http_client.get(url, headers=_DOWNLOAD_HEADERS, timeout=_DOWNLOAD_TIMEOUT)
         if resp.status_code == 200:
             return PILImage.open(io.BytesIO(resp.content))
@@ -105,6 +119,15 @@ def download_image_as_pil(url: str | None, http_client: httpx.Client) -> PILImag
 def pil_to_bytes(pil_img: PILImage.Image) -> io.BytesIO:
     output = io.BytesIO()
     pil_img.save(output, format="PNG")
+    output.seek(0)
+    return output
+
+
+def pil_to_jpeg_bytes(pil_img: PILImage.Image, quality: int = 90) -> io.BytesIO:
+    if pil_img.mode not in ("RGB", "L"):
+        pil_img = pil_img.convert("RGB")
+    output = io.BytesIO()
+    pil_img.save(output, format="JPEG", quality=quality, optimize=True)
     output.seek(0)
     return output
 
@@ -205,7 +228,7 @@ def draw_swatch_details(
     p_name = product_data.get("product_name", "Unknown Product").title()
     p_width = product_data.get("width", "-").title()
     p_weight = str(product_data.get("weight", "-"))
-    p_comp = product_data.get("manufacture_type", "-").title()
+    p_comp = product_data.get("composition", "100% Poly").title()
     p_wash = product_data.get("wash_code", "Dry Clean Only").title()
     p_end_use = product_data.get("end_use", category)
 
@@ -419,8 +442,18 @@ def generate_report_pdf(data: dict, fonts_dir: Path = Path("data/fonts")) -> byt
                         target_w = int(orig_w * scale)
                         target_h = int(orig_h * scale)
 
-                        final_pil = pil_img.resize((target_w, target_h), PILImage.Resampling.LANCZOS)
-                        temp_img = pil_to_bytes(final_pil)
+                        # Embed at higher pixel density than the on-page display
+                        # size needs (96 DPI baseline, same as px2mm elsewhere in
+                        # this file) so the PDF holds up when printed or zoomed -
+                        # clamped to the source image's own resolution so this
+                        # never fabricates detail the original doesn't have.
+                        TARGET_DPI = 300
+                        JPEG_QUALITY = 92
+                        embed_w = min(orig_w, round(target_w * TARGET_DPI / 96.0))
+                        embed_h = min(orig_h, round(target_h * TARGET_DPI / 96.0))
+
+                        final_pil = pil_img.resize((embed_w, embed_h), PILImage.Resampling.LANCZOS)
+                        temp_img = pil_to_jpeg_bytes(final_pil, quality=JPEG_QUALITY)
 
                         # Center the image horizontally and vertically within the 1248x894 bounding box
                         start_x = 96 + (max_w - target_w) / 2

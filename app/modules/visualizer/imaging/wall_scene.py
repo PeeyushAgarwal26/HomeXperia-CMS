@@ -50,12 +50,21 @@ def _max_rect_in_binary(mask01: np.ndarray) -> tuple[int, int, int, int] | None:
     return best_rect
 
 
-def estimate_wall_clear_region(room_img: np.ndarray, wall_quad: np.ndarray) -> np.ndarray:
+def estimate_wall_clear_region(
+    room_img: np.ndarray, wall_quad: np.ndarray, obstacle_mask: np.ndarray | None = None
+) -> np.ndarray:
     """Find the largest obstruction-free axis-aligned rectangle within
     `wall_quad`. Heuristic, not pixel-perfect (same spirit as
     estimate_floor_masks) — works in `wall_quad`'s own bounding box rather
     than its exact (possibly perspective-skewed) polygon, since the
     downstream placement box needs an axis-aligned rectangle anyway.
+
+    `obstacle_mask`, when given (0/255, same HxW as room_img), is ADDITIONALLY
+    excluded from the clear-candidate search on top of the color-uniformity
+    heuristic below — this is how wall_depth's protrusion detection (a TV
+    reads as color-uniform exactly like paint does, but stands measurably off
+    the wall plane) actually removes an object the color heuristic alone
+    can't tell apart from bare wall.
 
     Returns a quad (4x2 float32, same coordinate space as `wall_quad`) —
     degrades to `wall_quad` itself if no clear area can be found (e.g. the
@@ -101,6 +110,10 @@ def estimate_wall_clear_region(room_img: np.ndarray, wall_quad: np.ndarray) -> n
     dist_threshold = float(np.clip(np.percentile(sample_distances, 85) + 14.0, 18.0, 48.0))
 
     clear_candidates = np.where((wall_mask > 0) & (distances <= dist_threshold), 255, 0).astype(np.uint8)
+    if obstacle_mask is not None:
+        if obstacle_mask.shape[:2] != (height, width):
+            obstacle_mask = cv2.resize(obstacle_mask, (width, height), interpolation=cv2.INTER_NEAREST)
+        clear_candidates[obstacle_mask > 0] = 0
 
     kernel_small = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (7, 7))
     kernel_large = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (15, 15))

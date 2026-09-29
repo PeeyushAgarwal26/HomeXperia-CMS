@@ -57,6 +57,81 @@ def fill_enclosed_holes(mask: np.ndarray) -> np.ndarray:
     return np.where(enclosed_holes > 0, np.uint8(255), mask)
 
 
+def is_panel_product(product_data: dict | None) -> bool:
+    """A "panel" product gets a single, non-repeating pattern warped into its
+    real perspective quad (see warp_panel_texture) instead of being tiled
+    flat and square — matching how the reference implementation flags it,
+    via either of these two free-text fields containing the word "panel"."""
+    if not isinstance(product_data, dict):
+        return False
+    for key in ("manufacture_type", "design_no"):
+        value = product_data.get(key)
+        if isinstance(value, str) and "panel" in value.lower():
+            return True
+    return False
+
+
+def fill_voids(texture: np.ndarray, mask_gray: np.ndarray) -> np.ndarray:
+    """Patch masked pixels the warp missed with the nearest textured pixel.
+    A masked pixel must never render as a black hole."""
+    empty = (texture.max(axis=2) == 0).astype(np.uint8)
+    holes = (empty > 0) & (mask_gray > 0)
+    if not holes.any() or not (empty == 0).any():
+        return texture
+    try:
+        _, labels = cv2.distanceTransformWithLabels(empty, cv2.DIST_L2, 3, labelType=cv2.DIST_LABEL_PIXEL)
+        src_yx = np.argwhere(empty == 0)
+        lab_at_src = labels[empty == 0]
+        coord = np.zeros((int(lab_at_src.max()) + 1, 2), np.int32)
+        coord[lab_at_src] = src_yx
+        hy, hx = np.where(holes)
+        nyx = coord[labels[hy, hx]]
+        texture[hy, hx] = texture[nyx[:, 0], nyx[:, 1]]
+    except Exception:
+        pass
+    return texture
+
+
+def warp_panel_texture(pattern: np.ndarray, quad: np.ndarray, area_w: int, area_h: int) -> np.ndarray:
+    """Render one panel design into the perspective quad it actually hangs in.
+
+    The design's height is fitted to the panel's full drop — rod to hem, which
+    for an occluded panel runs past the furniture hiding it — and its width is
+    centre-cropped. So the top border always lands at the rod and the bottom
+    motif at the hem, on every panel of a window, whatever each panel's own
+    width or depth in the room, and the design's aspect ratio is never
+    distorted. The quad then puts it in the curtain's own perspective, so bands
+    across the fabric run parallel to the rod instead of square to the frame.
+    """
+    quad = np.asarray(quad, dtype=np.float32).reshape(4, 2)
+
+    # Rectified panel size: average the opposing edges, so the design is laid
+    # out flat in the panel's own proportions before it goes into perspective.
+    dst_w = max(8, int(round((np.linalg.norm(quad[1] - quad[0]) + np.linalg.norm(quad[2] - quad[3])) / 2.0)))
+    dst_h = max(8, int(round((np.linalg.norm(quad[3] - quad[0]) + np.linalg.norm(quad[2] - quad[1])) / 2.0)))
+
+    ph, pw = pattern.shape[:2]
+    scaled_w = max(1, int(round(pw * (dst_h / float(ph)))))
+    flat = cv2.resize(pattern, (scaled_w, dst_h), interpolation=cv2.INTER_LANCZOS4)
+
+    if scaled_w >= dst_w:
+        crop_x = (scaled_w - dst_w) // 2
+        flat = flat[:, crop_x : crop_x + dst_w]
+    else:
+        # A design narrower than the panel it has to cover: hold the edge
+        # columns out to the sides rather than leave the fabric bare.
+        pad = dst_w - scaled_w
+        flat = cv2.copyMakeBorder(flat, 0, 0, pad // 2, pad - pad // 2, cv2.BORDER_REPLICATE)
+
+    src = np.array([[0, 0], [dst_w, 0], [dst_w, dst_h], [0, dst_h]], dtype=np.float32)
+    M = cv2.getPerspectiveTransform(src, quad)
+    # The quad is fitted to cover the mask, so the border mode only ever paints
+    # a few pixels of slop. REFLECT is what it should paint: replicating an
+    # edge row drags one line of the design out into streaks, while a mirrored
+    # sliver still reads as fabric.
+    return cv2.warpPerspective(flat, M, (area_w, area_h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+
+
 def tile_texture(pattern: np.ndarray, area_w: int, area_h: int, tile_size_w: float) -> np.ndarray:
     ph, pw = pattern.shape[:2]
     scale = tile_size_w / float(pw)
@@ -119,6 +194,8 @@ def apply_pattern(
     texture_image: np.ndarray,
     settings: dict,
     product_width_cm: float | None,
+    is_panel: bool = False,
+    panel_quad: list | None = None,
 ) -> tuple[np.ndarray, int]:
     """
     Port of `utils/curtain.py::apply_pattern`.
@@ -135,6 +212,13 @@ def apply_pattern(
     `product_width_cm` corresponds to the original's `pattern_real_width`
     parameter (parsed from the product's `width` field upstream via
     `parse_width_to_cm`).
+
+    `is_panel`/`panel_quad`: when a "panel" product (is_panel_product) is
+    applied to a hotspot curtain_geometry.plan_panel_quads already found a
+    perspective quad for (panel_quad, normalized 0..1, TL/TR/BR/BL), the
+    design is warped into that real quad instead of tiled flat — see
+    warp_panel_texture. Only the texture-building step below differs; the
+    fold displacement and lighting blend after it are identical either way.
 
     Returns (final_img, calculated_repeat) exactly like the original.
     """
@@ -191,20 +275,26 @@ def apply_pattern(
         else:
             standard_curtain_px = W * 0.35
 
-        if pattern_real_width and curtain_real_width:
-            repeats_on_curtain = float(curtain_real_width) / float(pattern_real_width)
-            tile_size = standard_curtain_px / max(1.0, repeats_on_curtain)
-
-            calculated_repeat = max(1, int(round(repeats_on_curtain)))
-        else:
+        if is_panel and panel_quad is not None:
+            quad_px = np.asarray(panel_quad, dtype=np.float32).reshape(4, 2) * np.array([W, H], dtype=np.float32)
+            tiled_clean = warp_panel_texture(curtain_tex, quad_px, W, H)
+            tiled_clean = fill_voids(tiled_clean, mask_gray)
             calculated_repeat = max(1, int(repeat))
-            tile_size = mask_w / calculated_repeat
+        else:
+            if pattern_real_width and curtain_real_width:
+                repeats_on_curtain = float(curtain_real_width) / float(pattern_real_width)
+                tile_size = standard_curtain_px / max(1.0, repeats_on_curtain)
 
-        local_tiled = tile_texture(curtain_tex, mask_w, mask_h, tile_size)
+                calculated_repeat = max(1, int(round(repeats_on_curtain)))
+            else:
+                calculated_repeat = max(1, int(repeat))
+                tile_size = mask_w / calculated_repeat
 
-        tiled_clean = np.zeros((H, W, 3), dtype=np.uint8)
+            local_tiled = tile_texture(curtain_tex, mask_w, mask_h, tile_size)
 
-        tiled_clean[y:y + mask_h, x:x + mask_w] = local_tiled
+            tiled_clean = np.zeros((H, W, 3), dtype=np.uint8)
+
+            tiled_clean[y:y + mask_h, x:x + mask_w] = local_tiled
 
         fold_strength = 15 * (2.0 / 1.5)
 

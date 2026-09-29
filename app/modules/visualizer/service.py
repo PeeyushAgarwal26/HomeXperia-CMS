@@ -19,12 +19,16 @@ from app.modules.visualizer import cache, external_clients, storage_paths
 from app.modules.visualizer.imaging import (
     curtain,
     curtain_generation as curtain_generation_pipeline,
+    curtain_geometry,
+    depth,
     floor,
     pdf_generator,
+    rug_depth,
     rug_overlay,
     rug_scene,
     shared,
     wall,
+    wall_depth,
     wall_scene,
 )
 from app.modules.visualizer.repository import UsageLogRepository
@@ -51,6 +55,8 @@ from app.modules.visualizer.schemas import (
 )
 
 logger = logging.getLogger(__name__)
+
+M_TO_FT = 3.280839895
 
 ROOM_DIMENSION_PROMPT = """Estimate the room floor width and length from this single interior image.
 Return only a JSON object with:
@@ -178,8 +184,12 @@ class VisualizerService:
                 )
 
             try:
+                panel_quads = await self._build_curtain_geometry(full_layer_stack, current_image, room_id)
                 for layer in full_layer_stack:
-                    current_image = await self._process_single_layer(current_image, layer, room_id)
+                    quad_plan = panel_quads.get(layer.hotspotId) if layer.hotspotId else None
+                    current_image = await self._process_single_layer(
+                        current_image, layer, room_id, panel_quad=quad_plan["quad_norm"] if quad_plan else None
+                    )
 
                 final_bytes = await to_thread.run_sync(self._encode_jpeg, current_image)
                 final_url = await get_storage().save_bytes(
@@ -244,8 +254,46 @@ class VisualizerService:
             cache.set_processed_base(room_id, base_image_url, image)
             return image.copy()
 
+    async def _build_curtain_geometry(
+        self, full_layer_stack: list[HotspotLayer], current_image: np.ndarray, room_id: str
+    ) -> dict[str, dict]:
+        """Measure every curtain in the stack together, before any layer is
+        rendered, so sibling panels on one window share a rod/hem line
+        instead of each being warped independently off its own noisy edges.
+        Returns {} (skip planning entirely) unless at least one panel-
+        flagged product is actually being applied this request — the joint
+        fit costs real work, so it isn't run for an all-tiled curtain
+        window. Never raises: a mask fetch failing for one hotspot here
+        just drops it from the plan, same as _process_single_layer's own
+        per-layer isolation."""
+        curtain_masks: dict[str, np.ndarray] = {}
+        panel_present = False
+        height, width = current_image.shape[:2]
+
+        for layer in full_layer_stack:
+            if shared.find_category((layer.category or "").lower()) != "curtain":
+                continue
+            hotspot_id = layer.hotspotId
+            if not hotspot_id:
+                continue
+            product_dict = layer.product.model_dump() if layer.product else None
+            if curtain.is_panel_product(product_dict):
+                panel_present = True
+            coords = self._resolve_coords(layer.coords, current_image.shape)
+            try:
+                mask = await self._get_or_create_mask(room_id, hotspot_id, current_image, coords, layer.mask_image)
+            except Exception:
+                logger.exception("build_curtain_geometry: mask fetch failed for hotspot %s", hotspot_id)
+                continue
+            curtain_masks[hotspot_id] = mask
+
+        if not panel_present or not curtain_masks:
+            return {}
+
+        return await to_thread.run_sync(curtain_geometry.plan_panel_quads, curtain_masks, width, height)
+
     async def _process_single_layer(
-        self, current_image: np.ndarray, layer: HotspotLayer, room_id: str
+        self, current_image: np.ndarray, layer: HotspotLayer, room_id: str, panel_quad: list | None = None
     ) -> np.ndarray:
         hotspot_id = layer.hotspotId or "hotspotId"
         coords = self._resolve_coords(layer.coords, current_image.shape)
@@ -261,8 +309,17 @@ class VisualizerService:
                 else None
             )
             if category == "curtain":
+                product_dict = layer.product.model_dump() if layer.product else None
+                is_panel = curtain.is_panel_product(product_dict)
                 result_image, _ = await to_thread.run_sync(
-                    curtain.apply_pattern, current_image, mask, texture_image, settings_dict, product_width_cm
+                    curtain.apply_pattern,
+                    current_image,
+                    mask,
+                    texture_image,
+                    settings_dict,
+                    product_width_cm,
+                    is_panel,
+                    panel_quad,
                 )
             elif category == "floor":
                 detection = await to_thread.run_sync(floor.detect_floor_quad, current_image)
@@ -520,9 +577,51 @@ class VisualizerService:
                 # the same mask instead of trusting that fit.
                 wall_quad = await to_thread.run_sync(wall_scene.largest_rect_in_mask, wall_mask_gray)
 
-        clear_region_quad = await to_thread.run_sync(wall_scene.estimate_wall_clear_region, image, wall_quad)
+        # Depth-grounded obstacle detection: a TV/shelf/mounted object reads
+        # as "color-uniform" exactly like bare painted wall does, which is
+        # why estimate_wall_clear_region's LAB-color heuristic alone can
+        # place art on top of a TV — confirmed on a real room this session.
+        # Metric depth sidesteps that entirely: an object standing measurably
+        # off the fitted wall plane is unambiguous regardless of its color.
+        # Never allowed to hard-fail the request — any failure (model load,
+        # too little depth signal, a degenerate plane) just falls back to
+        # the classical color-only path exactly as it worked before.
+        obstacle_mask = None
+        used_depth = False
+        wall_width_ft = wall_height_ft = None
+        if wall_mask_gray is not None:
+            depth_map, depth_result = None, None
+            try:
+                depth_map = await to_thread.run_sync(depth.get_metric_depth, image)
+                focal_px = wall_depth.WALL_FOCAL_RATIO * max(height, width)
+                depth_result = await to_thread.run_sync(
+                    wall_depth.wall_quad_from_depth, depth_map, wall_mask_gray, focal_px, image.shape
+                )
+            except Exception:
+                logger.exception("wallart_depth_estimation_failed")
+
+            if depth_result is not None:
+                depth_quad, plane_info = depth_result
+                containment = wall_depth.quad_mask_containment(depth_quad, wall_mask_gray)
+                if wall_scene.wall_quad_is_reasonable(depth_quad) and containment >= 0.80:
+                    used_depth = True
+                    wall_width_ft = plane_info["width_m"] * M_TO_FT
+                    wall_height_ft = plane_info["height_m"] * M_TO_FT
+                    obstacle_mask = await to_thread.run_sync(
+                        wall_depth.protrusion_mask,
+                        depth_map,
+                        wall_mask_gray,
+                        plane_info["normal"],
+                        plane_info["center"],
+                        focal_px,
+                    )
+
+        clear_region_quad = await to_thread.run_sync(
+            wall_scene.estimate_wall_clear_region, image, wall_quad, obstacle_mask
+        )
         shadow_map = await to_thread.run_sync(rug_scene.extract_shadow_map, image, wall_mask_for_encoding)
-        wall_width_ft, wall_height_ft = await self._estimate_wall_dimensions(image, request.room_b64)
+        if not used_depth:
+            wall_width_ft, wall_height_ft = await self._estimate_wall_dimensions(image, request.room_b64)
         art_width_ft, art_height_ft = self._art_dimensions_ft(request.product_dimensions)
 
         # Only used as a fallback aspect ratio below when no real
@@ -603,7 +702,7 @@ class VisualizerService:
             art_width_ft=art_width_ft,
             art_height_ft=art_height_ft,
             fitted=fitted,
-            used_depth=False,
+            used_depth=used_depth,
             wall_mask_b64=wall_mask_b64,
             shadow_map_b64=shadow_map_b64,
             placement_quad_norm=_norm_quad(placement_quad),
@@ -731,10 +830,55 @@ class VisualizerService:
         else:
             visible_floor, _ = await to_thread.run_sync(rug_scene.estimate_floor_masks, image, floor_quad)
 
-        shadow_map = await to_thread.run_sync(rug_scene.extract_shadow_map, image, visible_floor)
-        width_ft, length_ft = await self._estimate_room_dimensions(image, request.room_b64)
-
         height, width = image.shape[0], image.shape[1]
+
+        # Depth-grounded room/quad sizing: replaces the classical 2D quad +
+        # GPT-vision size guess with a real fitted floor plane, calibrated
+        # against an object of known real-world size (bed/door/chair) found
+        # in the photo — see imaging/rug_depth.py's module docstring for why.
+        # Never allowed to hard-fail the request — any failure (model load,
+        # no plane fit, no usable reference object) just falls back to the
+        # classical path exactly as it worked before.
+        used_depth = False
+        width_ft = length_ft = None
+        try:
+            depth_map = await to_thread.run_sync(depth.get_metric_depth, image)
+            focal_px = wall_depth.WALL_FOCAL_RATIO * max(height, width)
+            floor_frame = await to_thread.run_sync(rug_depth.fit_floor_frame, depth_map, visible_floor, focal_px)
+
+            scale_factor = 1.0
+            if floor_frame is not None:
+                detections = await to_thread.run_sync(depth.detect_reference_objects, image)
+                scale_factor, _ = await to_thread.run_sync(
+                    rug_depth.reference_scale_factor, depth_map, focal_px, floor_frame, detections
+                )
+
+                depth_quad_result = await to_thread.run_sync(
+                    rug_depth.floor_quad_from_depth,
+                    depth_map,
+                    visible_floor,
+                    focal_px,
+                    image.shape,
+                    0.99,
+                    floor_frame,
+                    scale_factor,
+                )
+                if depth_quad_result is not None:
+                    floor_quad, floor_top_y, _quad_w_ft, _quad_l_ft = depth_quad_result
+                    used_depth = True
+
+                dims = await to_thread.run_sync(
+                    rug_depth.room_dims_from_depth, depth_map, visible_floor, focal_px, scale_factor, floor_frame
+                )
+                if dims is not None:
+                    width_ft, length_ft = dims["width_ft"], dims["length_ft"]
+        except Exception:
+            logger.exception("rug_depth_estimation_failed")
+
+        if width_ft is None or length_ft is None:
+            width_ft, length_ft = await self._estimate_room_dimensions(image, request.room_b64)
+
+        shadow_map = await to_thread.run_sync(rug_scene.extract_shadow_map, image, visible_floor)
         _, mask_buffer = cv2.imencode(".png", visible_floor)
         floor_mask_b64 = base64.b64encode(mask_buffer).decode()
         shadow_map_b64 = await to_thread.run_sync(rug_scene.encode_shadow_map_b64, shadow_map)
@@ -748,6 +892,7 @@ class VisualizerService:
             floor_quad_norm=[[float(x) / width, float(y) / height] for x, y in floor_quad],
             floor_mask_b64=floor_mask_b64,
             shadow_map_b64=shadow_map_b64,
+            used_depth=used_depth,
         )
 
     async def _estimate_room_dimensions(self, image: np.ndarray, room_b64: str | None) -> tuple[float, float]:

@@ -23,5 +23,14 @@ openai>=1.50.0
 fpdf2>=2.7.0
 qrcode>=8.0
 
+# Metric depth estimation for wall-art obstacle detection/sizing
+# (imaging/depth.py, imaging/wall_depth.py) — CPU-compatible; automatically
+# uses CUDA instead if a GPU + CUDA build of torch is present, no code change
+# needed. Installs a large (~GB-scale) model checkpoint from HuggingFace on
+# first use, cached locally after that.
+torch>=2.14.0
+torchvision>=0.29.0
+transformers>=5.17.0
+
 # AI Credits monthly rollover cron (in-process scheduler)
 apscheduler>=3.10.0

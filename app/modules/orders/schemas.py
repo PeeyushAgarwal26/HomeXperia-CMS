@@ -16,11 +16,22 @@ class CartCreateRequest(BaseModel):
     """One shot: creates a new named cart and its items together — matches
     the real client-frontend's "Lock Cart" step, which only ever has a
     client-side (sessionStorage) working cart to hand over at this point,
-    never an existing server-side cart id."""
+    never an existing server-side cart id.
+
+    total_amount is accepted on the wire but never read — same as
+    OrderCreateRequest, it's recomputed server-side from live product
+    rates in get_cart_detail rather than ever being trusted from the
+    client (Pydantic silently drops it since it isn't declared here).
+    Each item on the wire also carries a full product snapshot
+    (catalog_name, rate, brand_name, ...) that isn't declared on
+    CartItemCreateRequest for the same reason — create_cart only ever
+    reads product_id/quantity/uom off it and looks the rest up itself."""
+
+    model_config = ConfigDict(populate_by_name=True)
 
     name: str = Field(min_length=1, max_length=250)
     whatsapp_no: str = Field(min_length=1, max_length=20)
-    items: list[CartItemCreateRequest] = Field(min_length=1)
+    items: list[CartItemCreateRequest] = Field(min_length=1, alias="cart_items")
 
 
 class CartItemUpsertRequest(BaseModel):

@@ -108,6 +108,13 @@ class RugVisualizerSceneResponse(BaseModel):
     floor_quad_norm: list[list[float]]
     floor_mask_b64: str
     shadow_map_b64: str
+    # True when a real metric depth map (imaging/depth.py) was fit to the
+    # floor plane and (when a reference object was found) calibrated against
+    # it, grounding room_width_ft/room_length_ft and floor_quad_norm's own
+    # span in actual 3D geometry rather than a vision-LLM guess. False when
+    # that failed for any reason and the classical 2D quad + GPT-vision size
+    # estimate ran instead — the response is still complete either way.
+    used_depth: bool = False
 
 
 class WallArtVisualizerSceneRequest(BaseModel):
@@ -143,10 +150,14 @@ class WallArtVisualizerSceneResponse(BaseModel):
     # True if the art's real-world size fit inside clear_region_quad_norm
     # without needing to be scaled down.
     fitted: bool
-    # Old API had this (likely a mobile depth-sensor flag); no true depth
-    # estimation exists anywhere in this codebase, and none is being added
-    # here — always False. Kept only so a caller reading this field doesn't
-    # break; don't treat it as a real capability flag.
+    # True when a real metric depth map (imaging/depth.py) was successfully
+    # fit to the wall plane for this request, grounding wall_width_ft/
+    # wall_height_ft and obstacle detection in actual 3D geometry rather than
+    # a vision-LLM guess / LAB-color-uniformity heuristic. False when that
+    # failed for any reason (no wall mask supplied, insufficient depth
+    # signal, degenerate plane fit) and the classical fallback path ran
+    # instead — the response is still complete and usable either way, this
+    # just reflects which method produced it.
     used_depth: bool
     wall_mask_b64: str
     shadow_map_b64: str
