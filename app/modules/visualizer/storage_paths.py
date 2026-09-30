@@ -30,3 +30,19 @@ def mask_path(room_id: str, hotspot_id: str) -> Path:
 
 def mask_url(room_id: str, hotspot_id: str) -> str:
     return f"/{settings.uploads_url_prefix}/visualizer/masks/mask_{room_id}_{hotspot_id}.png"
+
+
+def upload_path(room_id: str, ext: str = "jpg") -> Path:
+    return UPLOADS_DIR / f"upload_{room_id}.{ext}"
+
+
+def upload_url(room_id: str, ext: str = "jpg") -> str:
+    return f"/{settings.uploads_url_prefix}/visualizer/uploads/upload_{room_id}.{ext}"
+
+
+def scene_map_path(room_id: str) -> Path:
+    return GENERATED_DIR / f"map_{room_id}.png"
+
+
+def scene_map_url(room_id: str) -> str:
+    return f"/{settings.uploads_url_prefix}/visualizer/generated/map_{room_id}.png"

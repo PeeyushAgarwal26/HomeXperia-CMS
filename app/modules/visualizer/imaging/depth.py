@@ -101,6 +101,21 @@ def _load_oneformer_if_needed() -> None:
     _oneformer_model = OneFormerForUniversalSegmentation.from_pretrained(ONEFORMER_MODEL_ID).to(device)
 
 
+def get_device() -> str:
+    """Public accessor for the shared cuda/cpu device string (cached once)."""
+    return _get_device()
+
+
+def get_oneformer():
+    """Public accessor for the shared OneFormer (processor, model) singleton.
+
+    Both detect_reference_objects below (rug reference-object calibration)
+    and scene_segmentation.py's full-scene panoptic pass share this one
+    lazily-loaded instance — whichever runs first pays the load cost."""
+    _load_oneformer_if_needed()
+    return _oneformer_processor, _oneformer_model
+
+
 def _label_tokens(label: str) -> set[str]:
     return {t for t in re.split(r"[^a-z]+", str(label).lower()) if t}
 

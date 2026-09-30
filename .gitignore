@@ -42,6 +42,10 @@ coverage.xml
 # Uploads (local dev storage)
 uploads/
 
+# Local ML model checkpoints (large binaries, downloaded once per
+# environment — see .env.example's SAM_HQ_CHECKPOINT_PATH)
+/data/models/
+
 # Editors / OS
 .DS_Store
 .vscode/

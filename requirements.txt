@@ -32,5 +32,20 @@ torch>=2.14.0
 torchvision>=0.29.0
 transformers>=5.17.0
 
+# Full-scene room segmentation (imaging/scene_segmentation.py) — occluder
+# refinement model, replaces the api.homexperia.com segmentation proxy.
+# Needs a local checkpoint too (SAM_HQ_CHECKPOINT_PATH, see .env.example) —
+# not bundled with this package.
+segment-anything-hq>=0.3
+# Undeclared transitive dependency of segment-anything-hq (imported
+# unconditionally at package init for its TinyViT variant, even though we
+# only load vit_b) — pinned explicitly since pip won't pull it in on its own.
+timm>=1.0.0
+# Undeclared transitive dependencies of BiRefNet-lite's HF remote code
+# (imaging/scene_segmentation.py's _load_birefnet_if_needed) — needed once a
+# room photo actually contains a fine occluder (plant/lamp/etc).
+einops>=0.8.0
+kornia>=0.8.0
+
 # AI Credits monthly rollover cron (in-process scheduler)
 apscheduler>=3.10.0

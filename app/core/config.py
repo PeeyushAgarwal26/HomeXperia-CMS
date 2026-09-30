@@ -81,9 +81,12 @@ class Settings(BaseSettings):
     # credentials, none of which existed in this codebase before that port.
     sam_api_url: str = ""
     sam_api_key: str = ""
-    prod_segmentation_api_url: str = "https://api.homexperia.com/api/upload"
-    prod_segmentation_api_key: str = ""
     openai_api_key: str = ""
+    # Local checkpoint for scene_segmentation.py's occluder-refinement model
+    # (SAM-HQ ViT-B) — not bundled with the segment-anything-hq package, must
+    # be downloaded once (see imaging/scene_segmentation.py's module docstring
+    # for the source URL) since it's too large to commit.
+    sam_hq_checkpoint_path: str = "data/models/sam_hq_vit_b.pth"
     # Flask hardcoded this True unconditionally, writing to a Debugs/ folder that
     # isn't guaranteed to exist. Default off here — an explicit, safer default.
     visualizer_debug_images: bool = False
