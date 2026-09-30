@@ -30,6 +30,7 @@ from app.modules.visualizer.imaging import (
     wall,
     wall_depth,
     wall_scene,
+    wallart_placement,
 )
 from app.modules.visualizer.repository import UsageLogRepository
 from app.modules.visualizer.schemas import (
@@ -541,9 +542,6 @@ class VisualizerService:
             raise BadRequestException("Could not load room image")
 
         height, width = image.shape[0], image.shape[1]
-        full_frame_quad = np.array(
-            [[0.0, 0.0], [width - 1.0, 0.0], [width - 1.0, height - 1.0], [0.0, height - 1.0]], dtype=np.float32
-        )
 
         wall_mask_gray = None
         if request.wall_mask_url:
@@ -551,6 +549,97 @@ class VisualizerService:
             wall_mask_gray = await to_thread.run_sync(self._decode_grayscale, mask_bytes)
             if wall_mask_gray.shape[:2] != (height, width):
                 wall_mask_gray = await to_thread.run_sync(cv2.resize, wall_mask_gray, (width, height))
+
+        product_image = None
+        if request.product_url:
+            product_image = await to_thread.run_sync(
+                shared.download_image, request.product_url, storage_paths.CACHE_DIR
+            )
+
+        # The real placement engine (imaging/wallart_placement.py, ported
+        # from the reference's utils/wallart.py — real-world eye-level/
+        # floor-anchor placement priority on a metric-plane-rectified clear
+        # search, not the naive centering below) needs both a real mask and
+        # a real product image to run. When either is missing, or it can't
+        # find a clear spot on the detected wall face, fall straight through
+        # to the classical path — this endpoint has never hard-failed and
+        # still doesn't.
+        placement = None
+        if wall_mask_gray is not None and product_image is not None:
+            depth_map = None
+            try:
+                depth_map = await to_thread.run_sync(depth.get_metric_depth, image)
+            except Exception:
+                logger.exception("wallart_depth_estimation_failed")
+
+            art_width_ft, art_height_ft = self._art_dimensions_ft(request.product_dimensions)
+            product_dims_cm = None
+            if art_width_ft and art_height_ft:
+                # analyze_wallart_scene wants centimetres; _art_dimensions_ft
+                # already resolved the feet-vs-inches ambiguity in the raw
+                # product_dimensions payload, so reuse its output rather
+                # than re-deriving that heuristic here.
+                product_dims_cm = {"width": art_width_ft * 30.48, "length": art_height_ft * 30.48}
+
+            try:
+                placement = await to_thread.run_sync(
+                    wallart_placement.analyze_wallart_scene,
+                    image,
+                    wall_mask_gray,
+                    product_image,
+                    product_dims_cm,
+                    depth_map,
+                )
+            except Exception:
+                logger.exception("wallart_placement_failed")
+
+        if placement is not None:
+            return await self._wallart_response_from_placement(placement, image, width, height)
+
+        return await self._wallart_classical_fallback(request, image, width, height, wall_mask_gray, product_image)
+
+    async def _wallart_response_from_placement(
+        self, placement: dict, image: np.ndarray, width: int, height: int
+    ) -> WallArtVisualizerSceneResponse:
+        face_mask = placement["face_mask"]
+        shadow_map = await to_thread.run_sync(rug_scene.extract_shadow_map, image, face_mask)
+        shadow_map_b64 = await to_thread.run_sync(rug_scene.encode_shadow_map_b64, shadow_map)
+        _, wall_mask_buffer = cv2.imencode(".png", face_mask)
+        wall_mask_b64 = base64.b64encode(wall_mask_buffer).decode()
+
+        return WallArtVisualizerSceneResponse(
+            wall_quad_norm=placement["wall_quad_norm"],
+            clear_region_quad_norm=placement["clear_region_quad_norm"],
+            room_width=width,
+            room_height=height,
+            wall_width_ft=placement["wall_width_ft"],
+            wall_height_ft=placement["wall_height_ft"],
+            art_width_ft=placement["art_width_ft"],
+            art_height_ft=placement["art_height_ft"],
+            fitted=placement["fitted"],
+            used_depth=placement["used_depth"],
+            wall_mask_b64=wall_mask_b64,
+            shadow_map_b64=shadow_map_b64,
+            placement_quad_norm=placement["placement_quad_norm"],
+            placement_center_norm=placement["placement_center_norm"],
+        )
+
+    async def _wallart_classical_fallback(
+        self,
+        request: WallArtVisualizerSceneRequest,
+        image: np.ndarray,
+        width: int,
+        height: int,
+        wall_mask_gray: np.ndarray | None,
+        product_image: np.ndarray | None,
+    ) -> WallArtVisualizerSceneResponse:
+        """Pre-wallart_placement logic: classical 2D quad + LAB-color clear-
+        region heuristic + naive centered sizing. Kept as the degrade path
+        for when there's no mask/product image, or the real placement engine
+        couldn't find a clear spot on the detected wall face."""
+        full_frame_quad = np.array(
+            [[0.0, 0.0], [width - 1.0, 0.0], [width - 1.0, height - 1.0], [0.0, height - 1.0]], dtype=np.float32
+        )
 
         wall_quad = None
         if wall_mask_gray is not None:
@@ -630,12 +719,8 @@ class VisualizerService:
         # is an artifact of whatever obstacle-free area was found, e.g. a
         # wide/short strip, and stretches the art image if used directly).
         product_image_aspect = 1.0
-        if request.product_url:
-            product_image = await to_thread.run_sync(
-                shared.download_image, request.product_url, storage_paths.CACHE_DIR
-            )
-            if product_image is not None and product_image.shape[0] > 0:
-                product_image_aspect = product_image.shape[1] / product_image.shape[0]
+        if product_image is not None and product_image.shape[0] > 0:
+            product_image_aspect = product_image.shape[1] / product_image.shape[0]
 
         wall_xs, wall_ys = wall_quad[:, 0], wall_quad[:, 1]
         wall_px_w = max(1.0, float(wall_xs.max() - wall_xs.min()))

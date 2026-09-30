@@ -153,6 +153,104 @@ def wall_quad_from_depth(
     return quad, info
 
 
+def wall_folds_from_depth(depth_m: np.ndarray, mask_gray: np.ndarray, max_folds: int = 2) -> list[int]:
+    """Detect up to `max_folds` corner folds in a wall mask from a depth-
+    gradient discontinuity — a mask spanning a real room corner has TWO
+    distinct planes, and averaging them into one plane fit produces a
+    meaningless quad. Returns the fold x-coordinates (image columns), sorted;
+    an empty list means the mask is (as far as this can tell) a single flat
+    face. Multi-gate validation: the per-column inverse-depth profile must
+    fit two segments meaningfully better than one, the two segments' slopes
+    must point in OPPOSITE directions (a real corner bends the ceiling line
+    in a V/Λ — a same-direction bend is an occlusion kink, not a corner),
+    the fold must sit well inside the wall's span, and the mask must have
+    substantial height at the fold column (real corners run floor-to-ceiling;
+    occlusion kinks don't)."""
+    H, W = mask_gray.shape[:2]
+    x, y, w, h = cv2.boundingRect(mask_gray)
+    if w < max(200, int(0.20 * W)):
+        return []
+
+    step = max(1, w // 300)
+    xs, ds = [], []
+    for col in range(x, x + w, step):
+        ys_c = np.where(mask_gray[:, col] > 0)[0]
+        if len(ys_c) < 5:
+            continue
+        z = depth_m[ys_c, col]
+        z = z[np.isfinite(z) & (z > 0.1) & (z < 30.0)]
+        if len(z) < 5:
+            continue
+        xs.append(col)
+        ds.append(1.0 / float(np.median(z)))
+
+    if len(xs) < 40:
+        return []
+    xs_arr, ds_arr = np.asarray(xs, np.float64), np.asarray(ds, np.float64)
+    ds_arr = ds_arr / (np.median(ds_arr) + 1e-12)
+    ds_arr = np.convolve(ds_arr, np.ones(5) / 5.0, mode="same")
+
+    def _fit(sel: np.ndarray) -> tuple[float, float]:
+        m, c2 = np.polyfit(xs_arr[sel], ds_arr[sel], 1)
+        return m, float(np.sum(np.abs(ds_arr[sel] - (m * xs_arr[sel] + c2))))
+
+    all_sel = np.ones(len(xs_arr), bool)
+    _, r0 = _fit(all_sel)
+    res0 = r0 / len(xs_arr)
+
+    min_seg = 0.18 * w
+    cands = [x + fr * w for fr in np.arange(0.20, 0.81, 0.04)]
+
+    def _eval(folds: list[float]) -> tuple[float, list[float]] | None:
+        bounds = [xs_arr[0] - 1] + list(folds) + [xs_arr[-1] + 1]
+        total, slopes = 0.0, []
+        for i in range(len(bounds) - 1):
+            sel = (xs_arr > bounds[i]) & (xs_arr <= bounds[i + 1])
+            if sel.sum() < 12 or xs_arr[sel].max() - xs_arr[sel].min() < min_seg:
+                return None
+            m, r = _fit(sel)
+            total += r
+            slopes.append(m)
+        return total / len(xs_arr), slopes
+
+    def _signif(m_a: float, m_b: float) -> bool:
+        return abs(m_a - m_b) * w > 0.20
+
+    best1 = None
+    for f1 in cands:
+        e = _eval([f1])
+        if e and (best1 is None or e[0] < best1[0]):
+            best1 = (e[0], e[1], [f1])
+
+    folds: list[float] = []
+    if best1 and best1[0] < 0.55 * res0 and _signif(best1[1][0], best1[1][1]):
+        folds = best1[2]
+        if max_folds >= 2:
+            best2 = None
+            for i, f1 in enumerate(cands):
+                for f2 in cands[i + 1 :]:
+                    if f2 - f1 < max(min_seg, 0.22 * w):
+                        continue
+                    e = _eval([f1, f2])
+                    if e and (best2 is None or e[0] < best2[0]):
+                        best2 = (e[0], e[1], [f1, f2])
+            if (
+                best2
+                and best2[0] < 0.6 * best1[0]
+                and _signif(best2[1][0], best2[1][1])
+                and _signif(best2[1][1], best2[1][2])
+            ):
+                folds = best2[2]
+
+    out = []
+    for fx in folds:
+        col = int(np.clip(fx, 0, W - 1))
+        ys_c = np.where(mask_gray[:, col] > 0)[0]
+        if len(ys_c) and (ys_c[-1] - ys_c[0]) >= 0.35 * h:
+            out.append(int(fx))
+    return sorted(out)
+
+
 def plane_depth_map(depth_m: np.ndarray, normal: list[float], center: list[float], focal_px: float) -> np.ndarray:
     """Per-pixel depth the fitted wall plane WOULD have at every pixel
     (ray-plane intersection), for comparison against the actually-measured
