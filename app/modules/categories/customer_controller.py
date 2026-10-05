@@ -45,6 +45,7 @@ async def list_children_for_customer(
             id=c.id,
             name=c.name,
             unique_code=c.name.strip().lower().replace(" ", "_"),
+            visualizer_type=c.visualizer_type,
             icon_url=c.icon_url,
             parent_category_id=c.parent_category_id,
         )

@@ -1,6 +1,15 @@
 import uuid
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+# Closed, admin-set vocabulary for ChildCategory.visualizer_type — replaces
+# deriving visualizer behavior from the category's display name (see
+# ChildCategoryCustomerItem below for why). A fixed set on purpose: the
+# whole point is that nothing here can be mistyped, so adding a new value
+# is a deliberate code change, not something an admin can accidentally
+# produce by renaming a category.
+VisualizerType = Literal["rug", "wall_art", "wallpaper", "wall_paint"]
 
 
 class ChildCategoryItem(BaseModel):
@@ -47,6 +56,7 @@ class ChildCategoryListItem(BaseModel):
     parent_category_id: uuid.UUID
     parent_category_name: str
     is_active: bool
+    visualizer_type: VisualizerType | None
 
 
 class ChildCategoryDetail(BaseModel):
@@ -55,18 +65,21 @@ class ChildCategoryDetail(BaseModel):
     icon_url: str | None
     parent_category_id: uuid.UUID
     is_active: bool
+    visualizer_type: VisualizerType | None
 
 
 class ChildCategoryCreateRequest(BaseModel):
     parent_category_id: uuid.UUID
     name: str = Field(min_length=1, max_length=250)
     icon_url: str | None = None
+    visualizer_type: VisualizerType | None = None
 
 
 class ChildCategoryUpdateRequest(BaseModel):
     parent_category_id: uuid.UUID
     name: str = Field(min_length=1, max_length=250)
     icon_url: str | None = None
+    visualizer_type: VisualizerType | None = None
 
 
 class StatusUpdateRequest(BaseModel):
@@ -85,14 +98,22 @@ class ParentCategoryCustomerItem(BaseModel):
 
 
 class ChildCategoryCustomerItem(BaseModel):
-    """unique_code is derived (lower-cased, underscored name), not a stored
-    column — the client app switches compositing behavior (e.g. repeat
-    count) on specific slugs like "wallpaper"/"wall_art". Only matches for
-    child categories whose name happens to equal one of those slugs; no
-    such mapping is stored or guaranteed today."""
+    """unique_code is derived (lower-cased, underscored name) and kept
+    exactly as-is for backward compatibility — unchanged by the
+    visualizer_type addition below, so nothing currently reading it
+    (including whatever a caller does with the category_type value built
+    from it) regresses.
+
+    visualizer_type is the real, admin-set, closed-vocabulary replacement:
+    a stored column (see ChildCategory.visualizer_type), not derived from
+    `name` at all. The client should switch to reading this field instead
+    of deriving/matching against `name`/`unique_code` for deciding which
+    visualizer flow a category triggers — it can't be broken by a display-
+    text rename or typo the way unique_code always could."""
 
     id: uuid.UUID
     name: str
     unique_code: str
+    visualizer_type: VisualizerType | None
     icon_url: str | None
     parent_category_id: uuid.UUID

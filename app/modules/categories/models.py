@@ -36,3 +36,11 @@ class ChildCategory(BaseModel, SoftDeleteMixin):
     icon_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     sort_order: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Admin-set, closed-vocabulary category behavior — decoupled from `name`
+    # on purpose. The client visualizer used to derive this from
+    # name.lower().replace(" ", "_") on every request (see
+    # customer_controller.py's unique_code), which meant a display-text
+    # typo/rename silently changed which visualizer flow a category
+    # triggered. One of VisualizerType's literal values (schemas.py), or
+    # None for "no special behavior" (most categories).
+    visualizer_type: Mapped[str | None] = mapped_column(String(30), nullable=True)

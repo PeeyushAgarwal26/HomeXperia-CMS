@@ -126,6 +126,7 @@ def _child_to_detail(child: ChildCategory) -> ChildCategoryDetail:
         icon_url=child.icon_url,
         parent_category_id=child.parent_category_id,
         is_active=child.is_active,
+        visualizer_type=child.visualizer_type,
     )
 
 
@@ -150,6 +151,7 @@ async def list_child_categories(
             parent_category_id=item.parent_category_id,
             parent_category_name=item.parent_category.name,
             is_active=item.is_active,
+            visualizer_type=item.visualizer_type,
         )
         for i, item in enumerate(items)
     ]
