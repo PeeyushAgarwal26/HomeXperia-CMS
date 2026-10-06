@@ -40,6 +40,7 @@ from app.modules.visualizer.schemas import (
     CleanupResponse,
     CurtainGenerationRequest,
     HotspotLayer,
+    HotspotSettings,
     MaskGenerationRequest,
     MaskGenerationResponse,
     ProcessRoomRequest,
@@ -331,12 +332,31 @@ class VisualizerService:
                     floor.apply_pattern, current_image, mask, texture_image, floor_quad, settings_dict
                 )
             elif category == "wall":
-                # wall.apply_pattern reads product width from settings["productWidthCm"]
-                # (computed upstream from product.width, not a raw settings key).
-                wall_settings = {**settings_dict, "productWidthCm": product_width_cm}
-                result_image = await to_thread.run_sync(
-                    wall.apply_pattern, current_image, mask, texture_image, wall_settings, storage_paths.DEBUG_DIR
+                # wall_depth.apply_pattern (the reference's real, live wall
+                # handler — wall.apply_pattern below is the superseded
+                # single-quad version their own app.py no longer calls) is
+                # depth-grounded and multi-plane; it never reads a product's
+                # real-world width the way the old algorithm did, so
+                # product_width_cm (still used by the curtain branch above)
+                # isn't threaded through here.
+                wall_depth_map = None
+                try:
+                    wall_depth_map = await to_thread.run_sync(depth.get_metric_depth, current_image)
+                except Exception:
+                    logger.exception("wall apply_pattern: depth estimation failed, using 2D fallback")
+                result_image, auto_repeat = await to_thread.run_sync(
+                    wall_depth.apply_pattern,
+                    current_image,
+                    texture_image,
+                    mask,
+                    settings_dict.get("repeat"),
+                    wall_depth_map,
                 )
+                if auto_repeat is not None:
+                    if layer.settings is None:
+                        layer.settings = HotspotSettings(repeat=auto_repeat)
+                    else:
+                        layer.settings.repeat = auto_repeat
             else:
                 result_image = await to_thread.run_sync(
                     rug_overlay.apply_pattern,

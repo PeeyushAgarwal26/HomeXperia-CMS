@@ -19,25 +19,30 @@ def tile_texture(pattern: np.ndarray, area_w: int, area_h: int, tile_size_w: flo
     ph, pw = pattern.shape[:2]
     scale = tile_size_w / float(pw)
     tile_size_h = max(1, int(ph * scale))
-    tile = cv2.resize(pattern, (int(tile_size_w), tile_size_h), interpolation=cv2.INTER_LANCZOS4)
+    tile = cv2.resize(pattern, (max(1, int(tile_size_w)), tile_size_h), interpolation=cv2.INTER_LANCZOS4)
     th, tw = tile.shape[:2]
     if th == 0 or tw == 0:
         return np.zeros((area_h, area_w, 3), dtype=np.uint8)
-    grid_h, grid_w = area_h + th, area_w + tw
-    grid_out = np.zeros((grid_h, grid_w, 3), dtype=np.uint8)
-    for y in range(0, grid_h, th):
-        for x in range(0, grid_w, tw):
-            h_slice = min(th, grid_h - y)
-            w_slice = min(tw, grid_w - x)
-            grid_out[y:y + h_slice, x:x + w_slice] = tile[:h_slice, :w_slice]
+    # np.tile instead of a manual nested-loop stamp — same result, faster.
+    reps_y = -(-area_h // th)
+    reps_x = -(-area_w // tw)
+    grid_out = np.tile(tile, (reps_y, reps_x, 1))
     return grid_out[:area_h, :area_w]
 
 
 def create_super_texture(
-    pattern: np.ndarray, target_w: int, target_h: int, tile_size_w: float
+    pattern: np.ndarray, target_w: int, target_h: int, tile_size_w: float, pad_x_tiles: int = 1, pad_y_tiles: int = 1
 ) -> tuple[np.ndarray, np.ndarray]:
-    pad_w = target_w
-    pad_h = target_h
+    """pad_x_tiles/pad_y_tiles: how many tile-widths/heights of padding to
+    build around the target area, beyond the flat single-tile default — a
+    plane whose warp needs to reach further past its own quad edges to
+    cover every masked pixel (see wall_depth.py::_warp_plane) asks for more
+    here. Defaults preserve the original single-tile-of-padding behavior."""
+    ph, pw = pattern.shape[:2]
+    tw = max(1, int(tile_size_w))
+    th = max(1, int(ph * (tile_size_w / float(pw))))
+    pad_w = tw * max(1, int(pad_x_tiles))
+    pad_h = th * max(1, int(pad_y_tiles))
     total_w = target_w + 2 * pad_w
     total_h = target_h + 2 * pad_h
     super_tex = tile_texture(pattern, total_w, total_h, tile_size_w)
